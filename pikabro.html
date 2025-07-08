@@ -2,13 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title> Run Bika Run! </title>
+  <title>Run Bika Run!</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <style>
+    body {
+      text-align: center;
+      font-family: sans-serif;
+      padding-top: 40px;
+    }
+    model-viewer {
+      width: 100%;
+      max-width: 500px;
+      height: 500px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Tap to View in AR</h1>
+
+  <h1>Tap to View in AR (iOS)</h1>
   <a rel="ar" href="pikabro.usdz">
-    <img src="pikabropreview.png" alt="Congratulations! You have received a limited AR Bika" width="300">
+    <img src="pikabropreview.png" alt="Tap to launch AR" width="300">
   </a>
+
+  <h2>Or interact below (GLB Viewer)</h2>
+  <model-viewer 
+    src="pikabro.glb" 
+    alt="Bika GLB model"
+    auto-rotate 
+    camera-controls 
+    background-color="#ffffff">
+  </model-viewer>
+
 </body>
 </html>
