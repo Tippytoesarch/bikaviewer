@@ -601,17 +601,14 @@
             };
         }
         
-        // CHANGED: Added a parameter to control collision checks for a more reliable spawn.
-        function spawnInSafeLocation(newEntity, checkAgainstBars, ...safeZones) {
+        // CHANGED: Reverted to a simpler, more robust spawner.
+        function spawnInSafeLocation(newEntity, ...safeZones) {
             for (let i = 0; i < GAME_CONSTANTS.SAFE_SPAWN_ATTEMPTS; i++) {
                 newEntity.x = Math.random() * (canvas.width - 80) + 40;
                 newEntity.y = Math.random() * (canvas.height - 80) + 40;
                 
-                let collides = safeZones.some(zone => utils.checkCollision(newEntity, zone));
-                
-                if (checkAgainstBars) {
-                    collides = collides || entities.jailBars.some(bar => utils.checkCollision(newEntity, bar));
-                }
+                const collides = safeZones.some(zone => utils.checkCollision(newEntity, zone)) || 
+                                 entities.jailBars.some(bar => utils.checkCollision(newEntity, bar));
 
                 if (!collides) return true;
             }
@@ -621,12 +618,12 @@
 
         function spawnGhost(playerSafeZone) {
             const newGhost = new Ghost(0, 0, currentLevelProps.ghostBaseSpeed, currentLevelProps.ghostTint);
-            // Ghosts must avoid bars.
-            if (spawnInSafeLocation(newGhost, true, playerSafeZone)) {
+            if (spawnInSafeLocation(newGhost, playerSafeZone)) {
                 entities.ghosts.push(newGhost);
             }
         }
-
+        
+        // CHANGED: Jail bars now use a dedicated, simpler spawner to prevent deadlocks.
         function spawnJailBar(playerSafeZone) {
             const isHorizontal = Math.random() > 0.5;
             const width = isHorizontal ? GAME_CONSTANTS.JAIL_BAR_LONG_SIDE : GAME_CONSTANTS.JAIL_BAR_SHORT_SIDE;
@@ -635,17 +632,23 @@
             const angle = Math.random() * Math.PI * 2;
             const newBar = new JailBar(0, 0, width, height, currentLevelProps.jailBarColor, Math.cos(angle) * speed, Math.sin(angle) * speed);
             
-            // Jail bars DON'T need to avoid other jail bars to prevent spawning locks.
-            if (spawnInSafeLocation(newBar, false, playerSafeZone)) {
-                entities.jailBars.push(newBar);
+            // This loop ensures bars find a spot, only avoiding the player's start zone.
+            for (let i = 0; i < GAME_CONSTANTS.SAFE_SPAWN_ATTEMPTS; i++) {
+                newBar.x = Math.random() * (canvas.width - 80) + 40;
+                newBar.y = Math.random() * (canvas.height - 80) + 40;
+
+                if (!utils.checkCollision(newBar, playerSafeZone)) {
+                    entities.jailBars.push(newBar);
+                    return; // Success, exit function
+                }
             }
+            console.warn("Could not find a safe spawn position for a jail bar.");
         }
         
         function spawnBread() {
             const newBread = new Bread(0, 0, currentLevelProps.breadTint);
             const playerSafeZone = { ...entities.player, width: 120, height: 120 };
-             // Bread must avoid bars.
-            if (spawnInSafeLocation(newBread, true, playerSafeZone, ...entities.breads)) {
+            if (spawnInSafeLocation(newBread, playerSafeZone, ...entities.breads)) {
                 entities.breads.push(newBread);
             }
         }
@@ -653,8 +656,7 @@
         function spawnPowerup() {
             const newPowerup = new Powerup(0, 0, currentLevelProps.powerupTint);
             const playerSafeZone = { ...entities.player, width: 120, height: 120 };
-             // Powerups must avoid bars.
-            if (spawnInSafeLocation(newPowerup, true, playerSafeZone, ...entities.powerups)) {
+            if (spawnInSafeLocation(newPowerup, playerSafeZone, ...entities.powerups)) {
                 entities.powerups.push(newPowerup);
             }
         }
