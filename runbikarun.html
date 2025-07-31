@@ -1,1 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Run Bika Run!</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrolling */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Full viewport height */
+            background-color: #000; /* Default background */
+            font-family: 'Avenir Next', sans-serif; /* Use a common font */
+            color: white;
+            -webkit-user-select: none; /* Disable text selection on iOS */
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            touch-action: none; /* Prevent browser touch actions like pull-to-refresh */
+        }
+
+        canvas {
+            display: block;
+            background-color: #003300; /* Initial game background */
+            border-radius: 10px; /* Rounded corners for the game area */
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5); /* Green glow */
+            max-width: 100vw; /* Ensure it fits within viewport width */
+            max-height: 100vh; /* Ensure it fits within viewport height */
+            /* Will be resized by JavaScript to maintain aspect ratio and fill screen */
+        }
+
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: yellow;
+            font-size: 2em;
+            text-align: center;
+            z-index: 100;
+        }
+
+        #loading-progress {
+            margin-top: 20px;
+            font-size: 0.6em;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        Loading Assets...
+        <div id="loading-progress">0%</div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const loadingScreen = document.getElementById('loading-screen');
+        const loadingProgress = document.getElementById('loading-progress');
+
+        // Game state variables
+        let gameState = 'LOADING'; // Initial state
+        let score = 0;
+        let scoreInCurrentLevel = 0;
+        let level = 1;
+        let bestSessionScore = 0; // Session-based best score
+
+        // Game entities
+        let player = null;
+        let ghosts = [];
+        let breads = [];
+        let powerups = [];
+        let jailBars = [];
+
+        // Game mechanics variables
+        let breadNeededForLevelClear = 0;
+        let breadSpawnInterval = 0;
+        let breadSpawnTimer = 0;
+        let powerupSpawnInterval = 0;
+        let powerupSpawnTimer = 0;
+        let playerSpeed = 4;
+        let speedBoostTimer = 0;
+        let touches = {}; // Store active touches
+        let levelStartTimer = 0.0;
+        let gameOverAutoRestartTimer = 0.0;
+        let playerLastXScale = 1; // 1 for default (left), -1 for flipped (right)
+
+        // Color transition variables
+        let backgroundColorTransitionActive = false;
+        let backgroundColorStartRGB = [0, 0, 0]; // Will be parsed from current background
+        let backgroundColorEndRGB = [0, 0, 0];   // Will be parsed from new level background
+        let backgroundColorTransitionTimer = 0;
+        const backgroundColorTransitionDuration = 1.5; // 1.5 seconds for the fade
+
+        // Level properties
+        const levelProperties = {
+            1: {
+                backgroundColor: '#003300',
+                playerTint: 'white',
+                ghostTint: 'white',
+                breadTint: 'white',
+                powerupTint: 'white',
+                jailBarColor: 'gray',
+                numGhosts: 3,
+                ghostBaseSpeed: 1.5,
+                numJailBars: 8,
+                jailBarBaseSpeed: 1.0,
+                breadSpawnInterval: 2.0,
+                powerupSpawnInterval: 12.0,
+                breadNeeded: 10,
+                playerSafeRadius: 80,
+                ghostActivationDelay: 0.0,
+                ghostInitialSpeedFactor: 1.0,
+            },
+            2: {
+                backgroundColor: '#202820',
+                playerTint: 'rgb(255, 204, 204)', // (1.0, 0.8, 0.8)
+                ghostTint: 'rgb(153, 128, 102)', // (0.6, 0.5, 0.4)
+                breadTint: 'rgb(255, 178, 128)', // (1.0, 0.7, 0.5)
+                powerupTint: 'rgb(204, 255, 204)', // (0.8, 1.0, 0.8)
+                jailBarColor: '#404040',
+                numGhosts: 4,
+                ghostBaseSpeed: 2.0,
+                numJailBars: 10,
+                jailBarBaseSpeed: 1.2,
+                breadSpawnInterval: 1.8,
+                powerupSpawnInterval: 10.0,
+                breadNeeded: 20,
+                playerSafeRadius: 100,
+                ghostActivationDelay: 0.5,
+                ghostInitialSpeedFactor: 0.8,
+            },
+            3: {
+                backgroundColor: 'rgb(24, 32, 40)', // #182028
+                playerTint: 'rgb(204, 204, 255)', // (0.8, 0.8, 1.0)
+                ghostTint: 'rgb(128, 153, 153)', // (0.5, 0.6, 0.6)
+                breadTint: 'rgb(178, 128, 178)', // (0.7, 0.5, 0.7)
+                powerupTint: 'rgb(255, 255, 204)', // (1.0, 1.0, 0.8)
+                jailBarColor: '#303050',
+                numGhosts: 5,
+                ghostBaseSpeed: 2.5,
+                numJailBars: 12,
+                jailBarBaseSpeed: 1.4,
+                breadSpawnInterval: 1.5,
+                powerupSpawnInterval: 8.0,
+                breadNeeded: 30,
+                playerSafeRadius: 120,
+                ghostActivationDelay: 1.0,
+                ghostInitialSpeedFactor: 0.6,
+            }
+        };
+
+        // Asset paths (YOU NEED TO REPLACE THESE WITH YOUR ACTUAL IMAGE/SOUND FILE PATHS)
+        const assetPaths = {
+            player: 'https://placehold.co/40x40/FF0000/FFFFFF?text=P', // Placeholder: Replace with your player.png
+            cop: 'https://placehold.co/40x40/0000FF/FFFFFF?text=C',    // Placeholder: Replace with your cop.png
+            bread: 'https://placehold.co/30x20/FFD700/000000?text=B',  // Placeholder: Replace with your bread.png
+            powerup: 'https://placehold.co/30x30/00FF00/FFFFFF?text=PWR', // Placeholder: Replace with your powerup.png
+            qrImages: [
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR1', // Placeholder: Replace with your qr1.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR2', // Placeholder: Replace with your qr2.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR3', // Placeholder: Replace with your qr3.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR4', // Placeholder: Replace with your qr4.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR5', // Placeholder: Replace with your qr5.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR6', // Placeholder: Replace with your qr6.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR7', // Placeholder: Replace with your qr7.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR8', // Placeholder: Replace with your qr8.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR9', // Placeholder: Replace with your qr9.png
+                'https://placehold.co/250x250/800080/FFFFFF?text=QR10' // Placeholder: Replace with your qr10.png
+            ],
+            biteSound: 'bite.mp3',       // Replace with your bite.mp3
+            gameOverSound: 'game-over.mp3', // Replace with your game-over.mp3
+            powerupSound: 'power-up.mp3',    // Replace with your power-up.mp3
+            levelUpSound: 'level-up.mp3'     // Replace with your level-up.mp3
+        };
+
+        const loadedAssets = {};
+        let assetsToLoad = 0;
+        let assetsLoaded = 0;
+
+        // Helper to parse RGB/Hex to [R, G, B] array
+        function parseColorToRGB(colorString) {
+            if (colorString.startsWith('rgb')) {
+                const match = colorString.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d*\.?\d+))?\)/);
+                if (match) {
+                    return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+                }
+            } else if (colorString.startsWith('#')) {
+                const hex = colorString.slice(1);
+                if (hex.length === 3) {
+                    return [parseInt(hex[0] + hex[0], 16), parseInt(hex[1] + hex[1], 16), parseInt(hex[2] + hex[2], 16)];
+                } else if (hex.length === 6) {
+                    return [parseInt(hex.substring(0, 2), 16), parseInt(hex.substring(2, 4), 16), parseInt(hex.substring(4, 6), 16)];
+                }
+            }
+            // Default to black if parsing fails
+            return [0, 0, 0];
+        }
+
+        // Helper to convert [R, G, B] to rgb() string
+        function rgbArrayToColorString(rgbArray) {
+            return `rgb(${Math.round(rgbArray[0])}, ${Math.round(rgbArray[1])}, ${Math.round(rgbArray[2])})`;
+        }
+
+        // --- Asset Loading Function ---
+        function loadAssets() {
+            const assetPromises = [];
+
+            // Load images
+            for (const key in assetPaths) {
+                if (key === 'qrImages') {
+                    assetPaths.qrImages.forEach(path => {
+                        assetsToLoad++;
+                        const img = new Image();
+                        img.src = path;
+                        const promise = new Promise((resolve, reject) => {
+                            img.onload = () => {
+                                loadedAssets[path] = img;
+                                assetsLoaded++;
+                                updateLoadingProgress();
+                                resolve();
+                            };
+                            img.onerror = () => {
+                                console.error(`Failed to load image: ${path}`);
+                                assetsLoaded++; // Still count as loaded to avoid blocking
+                                updateLoadingProgress();
+                                resolve(); // Resolve even on error to allow game to start
+                            };
+                        });
+                        assetPromises.push(promise);
+                    });
+                } else if (key.endsWith('Sound')) {
+                    assetsToLoad++;
+                    const audio = new Audio();
+                    audio.src = assetPaths[key];
+                    audio.preload = 'auto';
+                    const promise = new Promise((resolve, reject) => {
+                        audio.oncanplaythrough = () => {
+                            loadedAssets[key] = audio;
+                            assetsLoaded++;
+                            updateLoadingProgress();
+                            resolve();
+                        };
+                        audio.onerror = () => {
+                            console.warn(`Failed to load sound: ${assetPaths[key]}. Game will proceed without this sound.`);
+                            loadedAssets[key] = null; // Mark as null if failed
+                            assetsLoaded++; // Still count as loaded
+                            updateLoadingProgress();
+                            resolve(); // Resolve even on error
+                        };
+                        // For faster loading, sometimes just setting src is enough for modern browsers
+                        // If oncanplaythrough doesn't fire, a timeout fallback can be used.
+                        setTimeout(() => { // Fallback for sounds that might not fire oncanplaythrough
+                            if (!loadedAssets[key]) {
+                                console.warn(`Sound ${assetPaths[key]} did not load via oncanplaythrough, resolving with null.`);
+                                loadedAssets[key] = null;
+                                assetsLoaded++;
+                                updateLoadingProgress();
+                                resolve();
+                            }
+                        }, 2000); // 2 second timeout
+                    });
+                    assetPromises.push(promise);
+                } else {
+                    assetsToLoad++;
+                    const img = new Image();
+                    img.src = assetPaths[key];
+                    const promise = new Promise((resolve, reject) => {
+                        img.onload = () => {
+                            loadedAssets[key] = img;
+                            assetsLoaded++;
+                            updateLoadingProgress();
+                            resolve();
+                        };
+                        img.onerror = () => {
+                            console.error(`Failed to load image: ${assetPaths[key]}`);
+                            assetsLoaded++;
+                            updateLoadingProgress();
+                            resolve();
+                        };
+                    });
+                    assetPromises.push(promise);
+                }
+            }
+
+            Promise.all(assetPromises).then(() => {
+                loadingScreen.style.display = 'none';
+                setupGame(); // Start the game setup after all assets are loaded
+                gameLoop(); // Start the game loop
+            });
+        }
+
+        function updateLoadingProgress() {
+            const progress = (assetsLoaded / assetsToLoad) * 100;
+            loadingProgress.textContent = `${Math.floor(progress)}%`;
+        }
+
+        // --- Game Setup ---
+        function setupGame() {
+            // Adjust canvas size for responsiveness
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            gameState = 'TITLE';
+            score = 0;
+            scoreInCurrentLevel = 0;
+            level = 1;
+
+            // Clear existing entities from previous runs (if any)
+            ghosts = [];
+            breads = [];
+            powerups = [];
+            jailBars = [];
+            touches = {}; // Clear touches on game setup
+
+            // Reset color transition state
+            backgroundColorTransitionActive = false;
+            canvas.style.backgroundColor = levelProperties[1].backgroundColor; // Ensure initial background is set
+
+            // Initial UI elements for TITLE screen
+            drawTitleScreen();
+
+            // Set up touch event listeners
+            canvas.addEventListener('touchstart', handleTouchStart);
+            canvas.addEventListener('touchmove', handleTouchMove);
+            canvas.addEventListener('touchend', handleTouchEnd);
+            canvas.addEventListener('touchcancel', handleTouchEnd); // Handle touch cancellation
+        }
+
+        function resizeCanvas() {
+            const aspectRatio = 768 / 1024; // Pythonista default portrait aspect ratio (height / width)
+            let newWidth = window.innerWidth;
+            let newHeight = window.innerHeight;
+
+            if (newHeight / newWidth > aspectRatio) { // Window is taller than game aspect
+                newHeight = newWidth * aspectRatio;
+            } else { // Window is wider than game aspect
+                newWidth = newHeight / aspectRatio;
+            }
+
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            // When canvas resizes, its content is cleared. Redraw immediately.
+            draw();
+        }
+
+        // --- Drawing Functions ---
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawImageRotated(image, x, y, width, height, rotation, flipX) {
+            ctx.save();
+            ctx.translate(x, y);
+            if (flipX) {
+                ctx.scale(-1, 1);
+            }
+            ctx.rotate(rotation);
+            ctx.drawImage(image, -width / 2, -height / 2, width, height);
+            ctx.restore();
+        }
+
+        function drawRect(x, y, width, height, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x - width / 2, y - height / 2, width, height);
+        }
+
+        function drawText(text, x, y, font, color, align = 'center', alpha = 1) {
+            ctx.font = font;
+            ctx.fillStyle = color;
+            ctx.textAlign = align;
+            ctx.textBaseline = 'middle';
+            ctx.globalAlpha = alpha;
+            ctx.fillText(text, x, y);
+            ctx.globalAlpha = 1; // Reset alpha
+        }
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(currentTime = 0) {
+            const dt = (currentTime - lastTime) / 1000; // Convert ms to seconds
+            lastTime = currentTime;
+
+            update(dt);
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Update Game State ---
+        function update(dt) {
+            if (gameState === 'ERROR') {
+                return;
+            }
+
+            if (gameState === 'LEVEL_TRANSITION') {
+                // Handle background color transition
+                if (backgroundColorTransitionActive) {
+                    backgroundColorTransitionTimer += dt;
+                    const t = Math.min(1, backgroundColorTransitionTimer / backgroundColorTransitionDuration); // clamped 0-1
+
+                    const r = backgroundColorStartRGB[0] + (backgroundColorEndRGB[0] - backgroundColorStartRGB[0]) * t;
+                    const g = backgroundColorStartRGB[1] + (backgroundColorEndRGB[1] - backgroundColorStartRGB[1]) * t;
+                    const b = backgroundColorStartRGB[2] + (backgroundColorEndRGB[2] - backgroundColorStartRGB[2]) * t;
+                    canvas.style.backgroundColor = rgbArrayToColorString([r, g, b]);
+
+                    if (backgroundColorTransitionTimer >= backgroundColorTransitionDuration) {
+                        backgroundColorTransitionActive = false;
+                        canvas.style.backgroundColor = rgbArrayToColorString(backgroundColorEndRGB); // Ensure exact final color
+                    }
+                }
+
+                countdownTimer -= dt;
+                if (countdownTimer <= 0) {
+                    level += 1;
+                    loadLevel(level);
+                    gameState = 'PLAYING';
+                }
+                return;
+            }
+
+            if (gameState === 'GAME_OVER') {
+                gameOverAutoRestartTimer -= dt;
+                if (gameOverAutoRestartTimer <= 0) {
+                    if (score > bestSessionScore) {
+                        bestSessionScore = score;
+                    }
+                    setupGame(); // Go back to title screen
+                }
+                return;
+            }
+
+            if (gameState !== 'PLAYING') {
+                return;
+            }
+
+            levelStartTimer += dt;
+
+            // Update Jail Bars
+            jailBars.forEach(bar => {
+                let newX = bar.x + bar.xVel * dt * 60; // Scale velocity for dt
+                let newY = bar.y + bar.yVel * dt * 60;
+
+                // Bounce off walls
+                if (newX < 30 + bar.width / 2 || newX > canvas.width - 30 - bar.width / 2) {
+                    bar.xVel = -bar.xVel;
+                    newX = Math.max(30 + bar.width / 2, Math.min(newX, canvas.width - 30 - bar.width / 2));
+                }
+                if (newY < 30 + bar.height / 2 || newY > canvas.height - 30 - bar.height / 2) {
+                    bar.yVel = -bar.yVel;
+                    newY = Math.max(30 + bar.height / 2, Math.min(newY, canvas.height - 30 - bar.height / 2));
+                }
+                bar.x = newX;
+                bar.y = newY;
+            });
+
+            // Update Speed Boost Timer
+            if (speedBoostTimer > 0) {
+                speedBoostTimer -= dt;
+                if (speedBoostTimer <= 0) {
+                    playerSpeed = 4;
+                }
+            }
+
+            // Player Movement
+            if (player) {
+                let moveX = 0;
+                let moveY = 0;
+
+                if (Object.keys(touches).length > 0) {
+                    const touch = Object.values(touches)[0]; // Use the first touch
+                    const px = player.x;
+                    const py = player.y;
+
+                    if (touch.x < px) {
+                        moveX = -playerSpeed;
+                        playerLastXScale = 1; // Face left
+                    } else if (touch.x > px) {
+                        moveX = playerSpeed;
+                        playerLastXScale = -1; // Face right (flipped)
+                    }
+
+                    if (touch.y < py) {
+                        moveY = -playerSpeed;
+                    } else if (touch.y > py) {
+                        moveY = playerSpeed;
+                    }
+                }
+                player.xScale = playerLastXScale;
+
+                let potentialX = player.x + moveX * dt * 60;
+                let potentialY = player.y + moveY * dt * 60;
+
+                // Clamp to canvas bounds
+                potentialX = Math.max(20 + player.width / 2, Math.min(potentialX, canvas.width - 20 - player.width / 2));
+                potentialY = Math.max(20 + player.height / 2, Math.min(potentialY, canvas.height - 20 - player.height / 2));
+
+                // Collision with jail bars (X-axis)
+                let canMoveX = true;
+                const tempPlayerFrameX = { x: potentialX, y: player.y, width: player.width, height: player.height };
+                for (const bar of jailBars) {
+                    if (checkCollision(tempPlayerFrameX, bar)) {
+                        canMoveX = false;
+                        break;
+                    }
+                }
+                if (canMoveX) {
+                    player.x = potentialX;
+                }
+
+                // Collision with jail bars (Y-axis)
+                let canMoveY = true;
+                const tempPlayerFrameY = { x: player.x, y: potentialY, width: player.width, height: player.height };
+                for (const bar of jailBars) {
+                    if (checkCollision(tempPlayerFrameY, bar)) {
+                        canMoveY = false;
+                        break;
+                    }
+                }
+                if (canMoveY) {
+                    player.y = potentialY;
+                }
+            }
+
+            // Bread collection
+            if (player) {
+                const breadsToRemove = [];
+                for (let i = 0; i < breads.length; i++) {
+                    if (checkCollision(player, breads[i])) {
+                        breadsToRemove.push(i);
+                    }
+                }
+
+                for (let i = breadsToRemove.length - 1; i >= 0; i--) {
+                    const breadIndex = breadsToRemove[i];
+                    breads[breadIndex].collected = true; // Mark for removal
+                    breads[breadIndex].removeTime = 0.2; // Start scale animation
+                    breads[breadIndex].initialScale = 1;
+                    breads[breadIndex].targetScale = 1.2;
+
+                    score += 1;
+                    scoreInCurrentLevel += 1;
+                    playSound('biteSound');
+                }
+
+                // Filter out collected breads
+                breads = breads.filter(bread => !bread.collected);
+
+                // Update bread scale animation
+                breads.forEach(bread => {
+                    if (bread.removeTime !== undefined) {
+                        bread.removeTime -= dt;
+                        if (bread.removeTime > 0) {
+                            const progress = 1 - (bread.removeTime / 0.2);
+                            bread.scale = bread.initialScale + (bread.targetScale - bread.initialScale) * progress;
+                            if (progress > 0.5) { // Scale back down after peaking
+                                bread.scale = bread.targetScale - (bread.targetScale - 1) * (progress - 0.5) * 2;
+                            }
+                        } else {
+                            bread.scale = 1; // Reset scale if animation finished
+                            delete bread.removeTime;
+                            delete bread.initialScale;
+                            delete bread.targetScale;
+                        }
+                    }
+                });
+
+                if (scoreInCurrentLevel >= breadNeededForLevelClear) {
+                    gameState = 'LEVEL_TRANSITION';
+                    playSound('levelUpSound');
+                    countdownTimer = 10.0; // QR countdown
+                    // Setup color transition
+                    backgroundColorStartRGB = parseColorToRGB(canvas.style.backgroundColor);
+                    const nextLevelProps = levelProperties[level + 1] || getDynamicLevelProps(level + 1);
+                    backgroundColorEndRGB = parseColorToRGB(nextLevelProps.backgroundColor);
+                    backgroundColorTransitionTimer = 0;
+                    backgroundColorTransitionActive = true;
+
+                    // Clear current entities for next level transition
+                    ghosts = [];
+                    breads = [];
+                    powerups = [];
+                    jailBars = [];
+                }
+            }
+
+            // Bread spawning
+            breadSpawnTimer += dt;
+            if (breadSpawnTimer >= breadSpawnInterval && scoreInCurrentLevel < breadNeededForLevelClear) {
+                const currentProps = levelProperties[level] || getDynamicLevelProps(level);
+                spawnBread(currentProps.breadTint);
+                breadSpawnTimer = 0;
+            }
+
+            // Powerup spawning
+            powerupSpawnTimer += dt;
+            if (powerupSpawnTimer >= powerupSpawnInterval) {
+                const currentProps = levelProperties[level] || getDynamicLevelProps(level);
+                spawnPowerup(currentProps.powerupTint);
+                powerupSpawnTimer = 0;
+            }
+
+            // Powerup collection
+            if (player) {
+                const powerupsToRemove = [];
+                for (let i = 0; i < powerups.length; i++) {
+                    if (checkCollision(player, powerups[i])) {
+                        powerupsToRemove.push(i);
+                    }
+                }
+                for (let i = powerupsToRemove.length - 1; i >= 0; i--) {
+                    powerups[powerupsToRemove[i]].collected = true; // Mark for removal
+                    activateSpeedBoost();
+                }
+                powerups = powerups.filter(powerup => !powerup.collected);
+            }
+
+            // Ghost movement and collision
+            if (player) {
+                for (const ghost of ghosts) {
+                    if (!ghost.isActive && levelStartTimer >= ghost.activationDelay) {
+                        ghost.isActive = true;
+                    }
+
+                    if (ghost.isActive) {
+                        const px = player.x;
+                        const py = player.y;
+                        let gx = ghost.x;
+                        let gy = ghost.y;
+
+                        const rampUpDuration = 3.0;
+                        const timeSinceActivation = levelStartTimer - ghost.activationDelay;
+                        const currentSpeedFactor = Math.min(1.0,
+                            ghost.initialSpeedFactor + (1.0 - ghost.initialSpeedFactor) * (timeSinceActivation / rampUpDuration)
+                        );
+                        const currentGhostSpeed = ghost.speed * currentSpeedFactor;
+
+                        // Horizontal movement and facing for ghost
+                        if (gx < px) {
+                            gx += currentGhostSpeed * dt * 60;
+                            ghost.xScale = -1; // Flip to face right
+                        } else if (gx > px) {
+                            gx -= currentGhostSpeed * dt * 60;
+                            ghost.xScale = 1; // Face left (original)
+                        }
+
+                        // Vertical movement
+                        if (gy < py) {
+                            gy += currentGhostSpeed * dt * 60;
+                        } else if (gy > py) {
+                            gy -= currentGhostSpeed * dt * 60;
+                        }
+                        ghost.x = gx;
+                        ghost.y = gy;
+
+                        if (checkCollision(ghost, player)) {
+                            gameState = 'GAME_OVER';
+                            playSound('gameOverSound');
+                            gameOverAutoRestartTimer = loadedAssets.gameOverSound ? loadedAssets.gameOverSound.duration : 3.0; // Fallback duration
+                            // Clear all game-related entities immediately
+                            player = null; // Player is "removed"
+                            ghosts = [];
+                            breads = [];
+                            powerups = [];
+                            jailBars = [];
+
+                            if (score > bestSessionScore) {
+                                bestSessionScore = score;
+                            }
+                            break; // Exit ghost loop as game is over
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Drawing Game Elements ---
+        function draw() {
+            clearCanvas();
+
+            // Background color is now handled by update for transitions
+            // const currentProps = levelProperties[level] || getDynamicLevelProps(level);
+            // canvas.style.backgroundColor = currentProps.backgroundColor;
+
+            if (gameState === 'TITLE') {
+                drawTitleScreen();
+            } else if (gameState === 'PLAYING' || gameState === 'LEVEL_TRANSITION' || gameState === 'GAME_OVER') {
+                // Draw Jail Bars
+                jailBars.forEach(bar => {
+                    drawRect(bar.x, bar.y, bar.width, bar.height, bar.color);
+                });
+
+                // Draw Breads
+                breads.forEach(bread => {
+                    if (loadedAssets.bread) {
+                        ctx.save();
+                        ctx.translate(bread.x, bread.y);
+                        ctx.scale(bread.scale || 1, bread.scale || 1); // Apply scale for animation
+                        ctx.drawImage(loadedAssets.bread, -bread.width / 2, -bread.height / 2, bread.width, bread.height);
+                        ctx.restore();
+                    } else {
+                        drawRect(bread.x, bread.y, bread.width, bread.height, bread.color);
+                    }
+                });
+
+                // Draw Powerups
+                powerups.forEach(powerup => {
+                    if (loadedAssets.powerup) {
+                        ctx.drawImage(loadedAssets.powerup, powerup.x - powerup.width / 2, powerup.y - powerup.height / 2, powerup.width, powerup.height);
+                    } else {
+                        drawRect(powerup.x, powerup.y, powerup.width, powerup.height, powerup.color);
+                    }
+                });
+
+                // Draw Player
+                if (player && loadedAssets.player) {
+                    drawImageRotated(loadedAssets.player, player.x, player.y, player.width, player.height, 0, player.xScale === 1 ? false : true);
+                }
+
+                // Draw Ghosts
+                ghosts.forEach(ghost => {
+                    if (loadedAssets.cop) {
+                        drawImageRotated(loadedAssets.cop, ghost.x, ghost.y, ghost.width, ghost.height, 0, ghost.xScale === 1 ? false : true);
+                    } else {
+                        drawRect(ghost.x, ghost.y, ghost.width, ghost.height, ghost.color);
+                    }
+                });
+
+                // Draw Score Label
+                drawText(`Burek: ${scoreInCurrentLevel}/${breadNeededForLevelClear} Level: ${level} Total: ${score}`,
+                         canvas.width * 0.5, canvas.height - 50, '20px Avenir Next', 'white');
+
+
+                if (gameState === 'LEVEL_TRANSITION') {
+                    drawText(`Level ${level} Completed!`, canvas.width / 2, canvas.height / 2 - 220, '40px Avenir Next', 'green');
+                    drawText('Scan QR for Bonus', canvas.width / 2, canvas.height / 2 - 170, '30px Avenir Next', 'yellow');
+                    drawText(`Countdown: ${Math.floor(Math.max(0, countdownTimer))}`, canvas.width / 2, canvas.height / 2 + 170, '30px Avenir Next', 'yellow');
+                    // Draw QR Image
+                    const qrImage = loadedAssets[assetPaths.qrImages[Math.floor(Math.random() * assetPaths.qrImages.length)]];
+                    if (qrImage) {
+                        ctx.drawImage(qrImage, canvas.width / 2 - 125, canvas.height / 2 - 125, 250, 250);
+                    } else {
+                        drawText('QR Image Missing', canvas.width / 2, canvas.height / 2, '20px Avenir Next', 'red');
+                    }
+                } else if (gameState === 'GAME_OVER') {
+                    // Blinking ARRESTED! text (manual alpha adjustment for blinking)
+                    const blinkAlpha = Math.abs(Math.sin(performance.now() / 500)) * 0.8 + 0.2; // Blinks between 0.2 and 1.0
+                    drawText('ARRESTED!', canvas.width / 2, canvas.height / 2 - 100, '54px Avenir Next', 'red', 'center', blinkAlpha);
+                    drawText(`Final Score: ${score}\nLevel Reached: ${level}`, canvas.width / 2, canvas.height / 2 + 20, '36px Avenir Next', 'white');
+                }
+            }
+        }
+
+        // --- Game Logic Functions ---
+
+        function loadLevel(levelNumber) {
+            // Clear existing entities
+            ghosts = [];
+            breads = [];
+            powerups = [];
+            jailBars = [];
+            touches = {}; // Clear touches on level load
+
+            scoreInCurrentLevel = 0;
+
+            // Get level properties
+            const props = levelProperties[levelNumber] || getDynamicLevelProps(levelNumber);
+
+            // Update canvas background color is now handled by transition
+            // canvas.style.backgroundColor = props.backgroundColor;
+
+            // Initialize player
+            if (!player) {
+                player = {
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    width: 40,
+                    height: 40,
+                    xScale: 1,
+                    color: props.playerTint // For tinting if image is not used
+                };
+            } else {
+                player.x = canvas.width / 2;
+                player.y = canvas.height / 2;
+                player.xScale = 1;
+                player.color = props.playerTint;
+            }
+
+            breadNeededForLevelClear = props.breadNeeded;
+            breadSpawnInterval = props.breadSpawnInterval;
+            powerupSpawnInterval = props.powerupSpawnInterval;
+            playerSpeed = 4; // Reset speed
+
+            const playerSafeZoneRect = {
+                x: player.x,
+                y: player.y,
+                width: props.playerSafeRadius * 2,
+                height: props.playerSafeRadius * 2
+            };
+
+            levelStartTimer = 0.0;
+
+            // Spawn ghosts
+            for (let i = 0; i < props.numGhosts; i++) {
+                let spawnAttempts = 0;
+                const maxSpawnAttempts = 50;
+                while (spawnAttempts < maxSpawnAttempts) {
+                    const spawnX = Math.random() * (canvas.width - 80) + 40;
+                    const spawnY = Math.random() * (canvas.height - 80) + 40;
+                    const potentialGhostFrame = { x: spawnX, y: spawnY, width: 40, height: 40 };
+
+                    if (!checkCollision(potentialGhostFrame, playerSafeZoneRect)) {
+                        ghosts.push({
+                            x: spawnX,
+                            y: spawnY,
+                            width: 40,
+                            height: 40,
+                            color: props.ghostTint,
+                            speed: props.ghostBaseSpeed,
+                            isActive: false,
+                            activationDelay: props.ghostActivationDelay,
+                            initialSpeedFactor: props.ghostInitialSpeedFactor,
+                            xScale: 1 // Default facing left
+                        });
+                        break;
+                    }
+                    spawnAttempts++;
+                }
+                if (spawnAttempts === maxSpawnAttempts) {
+                    console.warn("Could not find a safe spawn position for a ghost.");
+                }
+            }
+
+            // Spawn jail bars
+            for (let i = 0; i < props.numJailBars; i++) {
+                let spawnAttempts = 0;
+                const maxSpawnAttempts = 50;
+                while (spawnAttempts < maxSpawnAttempts) {
+                    const isHorizontal = Math.random() > 0.5;
+                    const barWidth = isHorizontal ? 60 : 10;
+                    const barHeight = isHorizontal ? 10 : 60;
+
+                    const spawnX = Math.random() * (canvas.width - 120) + 60;
+                    const spawnY = Math.random() * (canvas.height - 100) + 50;
+                    const potentialBarFrame = { x: spawnX, y: spawnY, width: barWidth, height: barHeight };
+
+                    if (!checkCollision(potentialBarFrame, playerSafeZoneRect)) {
+                        jailBars.push({
+                            x: spawnX,
+                            y: spawnY,
+                            width: barWidth,
+                            height: barHeight,
+                            color: props.jailBarColor,
+                            xVel: (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 1 + 0.5) * props.jailBarBaseSpeed,
+                            yVel: (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 1 + 0.5) * props.jailBarBaseSpeed
+                        });
+                        break;
+                    }
+                    spawnAttempts++;
+                }
+                if (spawnAttempts === maxSpawnAttempts) {
+                    console.warn("Could not find a safe spawn position for a jail bar.");
+                }
+            }
+
+            // Initial bread spawn
+            for (let i = 0; i < breadNeededForLevelClear + 5; i++) {
+                spawnBread(props.breadTint);
+            }
+        }
+
+        function getDynamicLevelProps(levelNumber) {
+            const baseProps = levelProperties[3];
+            const levelDiff = levelNumber - 3;
+
+            const r_bg = Math.random() * 0.2 + 0.1;
+            const g_bg = Math.random() * 0.2 + 0.1;
+            const b_bg = Math.random() * 0.2 + 0.1;
+
+            return {
+                backgroundColor: `rgb(${Math.floor(r_bg * 255)}, ${Math.floor(g_bg * 255)}, ${Math.floor(b_bg * 255)})`,
+                playerTint: `rgb(${Math.floor((Math.random() * 0.1 + 0.9) * 255)}, ${Math.floor((Math.random() * 0.1 + 0.9) * 255)}, ${Math.floor((Math.random() * 0.1 + 0.9) * 255)})`,
+                ghostTint: `rgb(${Math.floor((Math.random() * 0.3 + 0.3) * 255)}, ${Math.floor((Math.random() * 0.3 + 0.3) * 255)}, ${Math.floor((Math.random() * 0.3 + 0.3) * 255)})`,
+                breadTint: `rgb(${Math.floor((Math.random() * 0.2 + 0.7) * 255)}, ${Math.floor((Math.random() * 0.2 + 0.7) * 255)}, ${Math.floor((Math.random() * 0.2 + 0.7) * 255)})`,
+                powerupTint: `rgb(${Math.floor((Math.random() * 0.2 + 0.7) * 255)}, ${Math.floor((Math.random() * 0.2 + 0.7) * 255)}, ${Math.floor((Math.random() * 0.2 + 0.7) * 255)})`,
+                jailBarColor: `rgb(${Math.floor((Math.random() * 0.3 + 0.2) * 255)}, ${Math.floor((Math.random() * 0.3 + 0.2) * 255)}, ${Math.floor((Math.random() * 0.3 + 0.2) * 255)})`,
+                numGhosts: baseProps.numGhosts + levelDiff * 1,
+                ghostBaseSpeed: baseProps.ghostBaseSpeed + levelDiff * 0.2,
+                numJailBars: baseProps.numJailBars + levelDiff * 2,
+                jailBarBaseSpeed: baseProps.jailBarBaseSpeed + levelDiff * 0.15,
+                breadSpawnInterval: Math.max(0.8, baseProps.breadSpawnInterval - levelDiff * 0.1),
+                powerupSpawnInterval: Math.max(5.0, baseProps.powerupSpawnInterval - levelDiff * 0.5),
+                breadNeeded: baseProps.breadNeeded + levelDiff * 10,
+                playerSafeRadius: baseProps.playerSafeRadius + levelDiff * 10,
+                ghostActivationDelay: baseProps.ghostActivationDelay + levelDiff * 0.2,
+                ghostInitialSpeedFactor: Math.max(0.5, baseProps.ghostInitialSpeedFactor - levelDiff * 0.05),
+            };
+        }
+
+        function spawnBread(tintColor) {
+            const playerSafeRadiusCollectible = 60;
+            const playerSafeZoneRect = {
+                x: player.x,
+                y: player.y,
+                width: playerSafeRadiusCollectible * 2,
+                height: playerSafeRadiusCollectible * 2
+            };
+
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * (canvas.width - 80) + 40;
+                const y = Math.random() * (canvas.height - 80) + 40;
+                const newBreadFrame = { x: x, y: y, width: 30, height: 20 };
+                let collides = false;
+
+                if (checkCollision(newBreadFrame, playerSafeZoneRect)) {
+                    collides = true;
+                }
+
+                if (!collides) {
+                    for (const bar of jailBars) {
+                        if (checkCollision(newBreadFrame, bar)) {
+                            collides = true;
+                            break;
+                        }
+                    }
+                }
+                if (!collides) {
+                    for (const existingBread of breads) {
+                        if (checkCollision(newBreadFrame, existingBread)) {
+                            collides = true;
+                            break;
+                        }
+                    }
+                }
+                if (!collides) {
+                    breads.push({ x: x, y: y, width: 30, height: 20, color: tintColor, scale: 1 });
+                    return;
+                }
+            }
+            console.warn("Could not find a safe spawn position for bread.");
+        }
+
+        function spawnPowerup(tintColor) {
+            const playerSafeRadiusCollectible = 80;
+            const playerSafeZoneRect = {
+                x: player.x,
+                y: player.y,
+                width: playerSafeRadiusCollectible * 2,
+                height: playerSafeRadiusCollectible * 2
+            };
+
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * (canvas.width - 80) + 40;
+                const y = Math.random() * (canvas.height - 80) + 40;
+                const powerupFrame = { x: x, y: y, width: 30, height: 30 };
+                let collides = false;
+
+                if (checkCollision(powerupFrame, playerSafeZoneRect)) {
+                    collides = true;
+                }
+
+                if (!collides) {
+                    for (const bar of jailBars) {
+                        if (checkCollision(powerupFrame, bar)) {
+                            collides = true;
+                            break;
+                        }
+                    }
+                }
+                if (!collides) {
+                    for (const existingPowerup of powerups) {
+                        if (checkCollision(powerupFrame, existingPowerup)) {
+                            collides = true;
+                            break;
+                        }
+                    }
+                }
+                if (!collides) {
+                    powerups.push({ x: x, y: y, width: 30, height: 30, color: tintColor });
+                    return;
+                }
+            }
+            console.warn("Could not find a safe spawn position for powerup.");
+        }
+
+        function activateSpeedBoost() {
+            playerSpeed = 8;
+            speedBoostTimer = 5.0;
+            playSound('powerupSound');
+        }
+
+        function playSound(soundKey) {
+            const audio = loadedAssets[soundKey];
+            if (audio) {
+                audio.currentTime = 0; // Rewind to start
+                audio.play().catch(e => console.warn(`Sound playback failed for ${soundKey}:`, e));
+            }
+        }
+
+        function checkCollision(rect1, rect2) {
+            // Rectangles are defined by center (x,y), width, height
+            // Convert to top-left (x,y) and bottom-right (x2,y2) for AABB collision
+            const r1 = {
+                x1: rect1.x - rect1.width / 2,
+                y1: rect1.y - rect1.height / 2,
+                x2: rect1.x + rect1.width / 2,
+                y2: rect1.y + rect1.height / 2
+            };
+            const r2 = {
+                x1: rect2.x - rect2.width / 2,
+                y1: rect2.y - rect2.height / 2,
+                x2: rect2.x + rect2.width / 2,
+                y2: rect2.y + rect2.height / 2
+            };
+
+            return r1.x1 < r2.x2 && r1.x2 > r2.x1 && r1.y1 < r2.y2 && r1.y2 > r2.y1;
+        }
+
+        // --- Touch Handling ---
+        // CORRECTED: getTouchPos now accepts a single touch object
+        function getTouchPos(canvas, touch) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (touch.clientX - rect.left) * scaleX,
+                y: (touch.clientY - rect.top) * scaleY
+            };
+        }
+
+        function handleTouchStart(event) {
+            event.preventDefault(); // Prevent scrolling and zooming
+            if (gameState === 'TITLE') {
+                gameState = 'PLAYING';
+                score = 0;
+                level = 1;
+                loadLevel(level);
+            } else if (gameState === 'GAME_OVER') {
+                // Allow tap to restart early
+                if (score > bestSessionScore) {
+                    bestSessionScore = score;
+                }
+                setupGame(); // Go back to title screen
+            } else if (gameState === 'PLAYING') {
+                for (let i = 0; i < event.touches.length; i++) {
+                    const touch = event.touches[i];
+                    // CORRECTED: Pass the individual touch object
+                    touches[touch.identifier] = getTouchPos(canvas, touch);
+                }
+            }
+        }
+
+        function handleTouchMove(event) {
+            event.preventDefault();
+            if (gameState === 'PLAYING') {
+                for (let i = 0; i < event.touches.length; i++) {
+                    const touch = event.touches[i];
+                    // CORRECTED: Pass the individual touch object
+                    touches[touch.identifier] = getTouchPos(canvas, touch);
+                }
+            }
+        }
+
+        function handleTouchEnd(event) {
+            event.preventDefault();
+            if (gameState === 'PLAYING') {
+                for (let i = 0; i < event.changedTouches.length; i++) {
+                    const touch = event.changedTouches[i];
+                    delete touches[touch.identifier];
+                }
+            }
+        }
+
+        // --- Title Screen Drawing ---
+        let instructionAlpha = 1;
+        let instructionBlinkDirection = -1; // -1 for fading out, 1 for fading in
+        const blinkSpeed = 0.9; // seconds per fade direction
+
+        function drawTitleScreen() {
+            drawText('Run Bika Run!', canvas.width / 2, canvas.height / 2 - 40, '120px Avenir Next', 'yellow');
+
+            // Update blinking alpha for "Tap to Start"
+            const dt = (performance.now() - lastTime) / 1000;
+            instructionAlpha += instructionBlinkDirection * (dt / blinkSpeed);
+            if (instructionAlpha <= 0.2) {
+                instructionAlpha = 0.2;
+                instructionBlinkDirection = 1;
+            } else if (instructionAlpha >= 1) {
+                instructionAlpha = 1;
+                instructionBlinkDirection = -1;
+            }
+
+            drawText('Tap to Start', canvas.width / 2, canvas.height / 2 + 40, '30px Avenir Next', 'yellow', 'center', instructionAlpha);
+            drawText(`Session Best: ${bestSessionScore}`, canvas.width / 2, canvas.height / 2 + 80, '25px Avenir Next', 'gold');
+        }
+
+        // --- Start the game by loading assets ---
+        window.onload = loadAssets;
+
+    </script>
+</body>
+</html>
 
