@@ -47,17 +47,40 @@
             font-size: 2em;
             text-align: center;
             z-index: 100;
+            transition: opacity 0.5s ease-out; /* Smooth fade out */
+        }
+
+        #loading-text {
+            font-size: 1.2em;
+            margin-bottom: 10px;
         }
 
         #loading-progress {
             margin-top: 20px;
-            font-size: 0.6em;
+            font-size: 0.8em; /* Slightly larger for visibility */
+            font-weight: bold;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 0, 0.3);
+            border-top: 4px solid yellow;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div id="loading-screen">
-        Loading Assets...
+        <div class="spinner"></div>
+        <div id="loading-text">Loading Assets...</div>
         <div id="loading-progress">0%</div>
     </div>
     <canvas id="gameCanvas"></canvas>
@@ -67,6 +90,7 @@
         const ctx = canvas.getContext('2d');
         const loadingScreen = document.getElementById('loading-screen');
         const loadingProgress = document.getElementById('loading-progress');
+        const loadingText = document.getElementById('loading-text'); // Get the loading text element
 
         // Game state variables
         let gameState = 'LOADING'; // Initial state
@@ -94,6 +118,7 @@
         let levelStartTimer = 0.0;
         let gameOverAutoRestartTimer = 0.0;
         let playerLastXScale = 1; // 1 for default (left), -1 for flipped (right)
+        let currentQrImage = null; // NEW: Store the selected QR image for the current level transition
 
         // Color transition variables
         let backgroundColorTransitionActive = false;
@@ -162,26 +187,27 @@
 
         // Asset paths (YOU NEED TO REPLACE THESE WITH YOUR ACTUAL IMAGE/SOUND FILE PATHS)
         const assetPaths = {
-            player: 'https://tippytoesarch.github.io/bikaviewer/assets/player.png', // Placeholder: Replace with your player.png
-            cop: 'https://tippytoesarch.github.io/bikaviewer/assets/cop.png',    // Placeholder: Replace with your cop.png
-            bread: 'https://tippytoesarch.github.io/bikaviewer/assets/bread.png',  // Placeholder: Replace with your bread.png
-            powerup: 'https://tippytoesarch.github.io/bikaviewer/assets/powerup.png', // Placeholder: Replace with your powerup.png
+            player: 'https://tippytoesarch.github.io/bikaviewer/assets/player.png',
+            cop: 'https://tippytoesarch.github.io/bikaviewer/assets/cop.png',
+            bread: 'https://tippytoesarch.github.io/bikaviewer/assets/bread.png',
+            powerup: 'https://tippytoesarch.github.io/bikaviewer/assets/powerup.png',
             qrImages: [
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr1.png', // Placeholder: Replace with your qr1.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr2.png', // Placeholder: Replace with your qr2.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr3.png', // Placeholder: Replace with your qr3.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr4.png', // Placeholder: Replace with your qr4.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr5.png', // Placeholder: Replace with your qr5.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr6.png', // Placeholder: Replace with your qr6.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr7.png', // Placeholder: Replace with your qr7.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr8.png', // Placeholder: Replace with your qr8.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr9.png', // Placeholder: Replace with your qr9.png
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr10.png', // Placeholder: Replace with your qr10.png
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr1.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr2.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr3.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr4.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr5.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr6.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr7.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr8.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr9.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr10.png'
             ],
-            biteSound: 'bite.mp3',       // Replace with your bite.mp3
-            gameOverSound: 'game-over.mp3', // Replace with your game-over.mp3
-            powerupSound: 'power-up.mp3',    // Replace with your power-up.mp3
-            levelUpSound: 'level-up.mp3'     // Replace with your level-up.mp3
+            // FIXED: Changed sound paths to full URLs
+            biteSound: 'https://tippytoesarch.github.io/bikaviewer/assets/bite.mp3',
+            gameOverSound: 'https://tippytoesarch.github.io/bikaviewer/assets/game-over.mp3',
+            powerupSound: 'https://tippytoesarch.github.io/bikaviewer/assets/power-up.mp3',
+            levelUpSound: 'https://tippytoesarch.github.io/bikaviewer/assets/level-up.mp3'
         };
 
         const loadedAssets = {};
@@ -294,15 +320,20 @@
             }
 
             Promise.all(assetPromises).then(() => {
-                loadingScreen.style.display = 'none';
-                setupGame(); // Start the game setup after all assets are loaded
-                gameLoop(); // Start the game loop
+                // Fade out loading screen
+                loadingScreen.style.opacity = '0';
+                setTimeout(() => {
+                    loadingScreen.style.display = 'none';
+                    setupGame(); // Start the game setup after all assets are loaded
+                    gameLoop(); // Start the game loop
+                }, 500); // Wait for fade-out transition
             });
         }
 
         function updateLoadingProgress() {
             const progress = (assetsLoaded / assetsToLoad) * 100;
             loadingProgress.textContent = `${Math.floor(progress)}%`;
+            loadingText.textContent = `Loading Assets (${assetsLoaded}/${assetsToLoad})...`; // Update detailed text
         }
 
         // --- Game Setup ---
@@ -586,6 +617,9 @@
                     backgroundColorTransitionTimer = 0;
                     backgroundColorTransitionActive = true;
 
+                    // NEW: Select one random QR image for this transition
+                    currentQrImage = loadedAssets[assetPaths.qrImages[Math.floor(Math.random() * assetPaths.qrImages.length)]];
+
                     // Clear current entities for next level transition
                     ghosts = [];
                     breads = [];
@@ -745,10 +779,9 @@
                     drawText(`Level ${level} Completed!`, canvas.width / 2, canvas.height / 2 - 220, '40px Avenir Next', 'green');
                     drawText('Scan QR for Bonus', canvas.width / 2, canvas.height / 2 - 170, '30px Avenir Next', 'yellow');
                     drawText(`Countdown: ${Math.floor(Math.max(0, countdownTimer))}`, canvas.width / 2, canvas.height / 2 + 170, '30px Avenir Next', 'yellow');
-                    // Draw QR Image
-                    const qrImage = loadedAssets[assetPaths.qrImages[Math.floor(Math.random() * assetPaths.qrImages.length)]];
-                    if (qrImage) {
-                        ctx.drawImage(qrImage, canvas.width / 2 - 125, canvas.height / 2 - 125, 250, 250);
+                    // Draw the ONE selected QR Image
+                    if (currentQrImage) { // Use the stored QR image
+                        ctx.drawImage(currentQrImage, canvas.width / 2 - 125, canvas.height / 2 - 125, 250, 250);
                     } else {
                         drawText('QR Image Missing', canvas.width / 2, canvas.height / 2, '20px Avenir Next', 'red');
                     }
@@ -1003,6 +1036,7 @@
             const audio = loadedAssets[soundKey];
             if (audio) {
                 audio.currentTime = 0; // Rewind to start
+                // Attempt to play, catch potential autoplay policy errors
                 audio.play().catch(e => console.warn(`Sound playback failed for ${soundKey}:`, e));
             }
         }
@@ -1110,4 +1144,3 @@
     </script>
 </body>
 </html>
-
