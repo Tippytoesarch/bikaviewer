@@ -107,6 +107,8 @@
             BACKGROUND_FADE_DURATION: 1.5,
             SAFE_SPAWN_ATTEMPTS: 50,
             CANVAS_PADDING: 20,
+            // CHANGED: Added a constant for the score text Y-position.
+            SCORE_TEXT_Y_OFFSET: 50,
         };
 
         // --- Game State Variables ---
@@ -148,7 +150,6 @@
         const levelProperties = {
             1: { backgroundColor: '#003300', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: 'gray', numGhosts: 3, ghostBaseSpeed: 90, numJailBars: 8, jailBarBaseSpeed: 1.0, breadSpawnInterval: 2.0, powerupSpawnInterval: 12.0, breadNeeded: 10, playerSafeRadius: 80, ghostActivationDelay: 0.0, ghostInitialSpeedFactor: 1.0, },
             2: { backgroundColor: '#202820', playerTint: 'rgb(255, 204, 204)', ghostTint: 'rgb(153, 128, 102)', breadTint: 'rgb(255, 178, 128)', powerupTint: 'rgb(204, 255, 204)', jailBarColor: '#404040', numGhosts: 4, ghostBaseSpeed: 120, numJailBars: 10, jailBarBaseSpeed: 1.2, breadSpawnInterval: 1.8, powerupSpawnInterval: 10.0, breadNeeded: 20, playerSafeRadius: 100, ghostActivationDelay: 0.5, ghostInitialSpeedFactor: 0.8, },
-            // CHANGED: Level 3 now uses the purple background and original sprite colors (by setting tint to 'white').
             3: { backgroundColor: '#4C2A85', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: '#D3D3D3', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
         };
 
@@ -468,8 +469,9 @@
                     entities.powerups.forEach(p => p.draw(ctx));
                     entities.ghosts.forEach(g => g.draw(ctx));
                     entities.player?.draw(ctx);
+                    // CHANGED: Using the new constant to position the score text higher.
                     drawText(`Burek: ${scoreInCurrentLevel}/${currentLevelProps.breadNeeded}  |  Level: ${level}  |  Total: ${score}`,
-                        canvas.width / 2, canvas.height - 30, '20px Avenir Next', 'white');
+                        canvas.width / 2, canvas.height - GAME_CONSTANTS.SCORE_TEXT_Y_OFFSET, '20px Avenir Next', 'white');
                 }
             },
             LEVEL_TRANSITION: {
