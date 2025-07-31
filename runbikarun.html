@@ -98,15 +98,14 @@
             BREAD_HEIGHT: 18,
             POWERUP_WIDTH: 30,
             POWERUP_HEIGHT: 30,
-            // CHANGED: Made jail bars smaller.
-            JAIL_BAR_LONG_SIDE: 60,
-            JAIL_BAR_SHORT_SIDE: 8,
+            // CHANGED: Made jail bars even smaller.
+            JAIL_BAR_LONG_SIDE: 50,
+            JAIL_BAR_SHORT_SIDE: 5,
             ASPECT_RATIO: 16 / 9,
             GAME_OVER_DURATION: 3.5,
             LEVEL_TRANSITION_DURATION: 10.0,
             SPEED_BOOST_DURATION: 5.0,
-            // CHANGED: Made the bread collection animation much faster to feel more instant.
-            BREAD_COLLECT_ANIM_DURATION: 0.15,
+            // CHANGED: Removed animation duration as it's no longer used.
             BACKGROUND_FADE_DURATION: 1.5,
             SAFE_SPAWN_ATTEMPTS: 50,
             CANVAS_PADDING: 20,
@@ -300,20 +299,11 @@
                 ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
             }
         }
-
+        
+        // CHANGED: Simplified Collectible class by removing animation properties.
         class Collectible extends Entity {
             constructor(x, y, width, height, color) {
                 super(x, y, width, height, color);
-                this.isCollected = false;
-                this.animTimer = 0;
-                this.scale = 1;
-            }
-            updateCollectionAnim(dt) {
-                if (!this.isCollected) return false;
-                this.animTimer += dt;
-                const progress = this.animTimer / GAME_CONSTANTS.BREAD_COLLECT_ANIM_DURATION;
-                this.scale = 1 + Math.sin(progress * Math.PI) * 0.5;
-                return progress >= 1;
             }
         }
 
@@ -322,11 +312,8 @@
                 super(x, y, GAME_CONSTANTS.BREAD_WIDTH, GAME_CONSTANTS.BREAD_HEIGHT, color);
             }
             draw(ctx) {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.scale(this.scale, this.scale);
+                // CHANGED: Removed scaling logic as animation is gone.
                 super.draw(ctx, loadedAssets.bread, currentLevelProps.breadTint);
-                ctx.restore();
             }
         }
 
@@ -449,24 +436,30 @@
                             changeState('GAME_OVER');
                             return;
                         }
-                        entities.breads.forEach(b => {
-                            if (!b.isCollected && utils.checkCollision(entities.player, b)) {
-                                b.isCollected = true;
+                        
+                        // CHANGED: New logic for instant item collection and removal.
+                        const breadToKeep = [];
+                        for(const bread of entities.breads) {
+                            if (utils.checkCollision(entities.player, bread)) {
                                 score++;
                                 scoreInCurrentLevel++;
                                 utils.playSound('biteSound');
+                            } else {
+                                breadToKeep.push(bread);
                             }
-                        });
-                        entities.powerups.forEach(p => {
-                            if (!p.isCollected && utils.checkCollision(entities.player, p)) {
-                                p.isCollected = true;
-                                entities.player.activateSpeedBoost();
-                            }
-                        });
-                    }
+                        }
+                        entities.breads = breadToKeep;
 
-                    entities.breads = entities.breads.filter(b => !b.updateCollectionAnim(dt));
-                    entities.powerups = entities.powerups.filter(p => !p.updateCollectionAnim(dt));
+                        const powerupsToKeep = [];
+                        for(const powerup of entities.powerups) {
+                            if(utils.checkCollision(entities.player, powerup)) {
+                                entities.player.activateSpeedBoost();
+                            } else {
+                                powerupsToKeep.push(powerup);
+                            }
+                        }
+                        entities.powerups = powerupsToKeep;
+                    }
 
                     if (scoreInCurrentLevel >= currentLevelProps.breadNeeded) {
                         utils.playSound('levelUpSound');
@@ -630,7 +623,6 @@
 
         function spawnJailBar(playerSafeZone) {
             const isHorizontal = Math.random() > 0.5;
-            // CHANGED: Using constants for bar sizes to make them smaller.
             const width = isHorizontal ? GAME_CONSTANTS.JAIL_BAR_LONG_SIDE : GAME_CONSTANTS.JAIL_BAR_SHORT_SIDE;
             const height = isHorizontal ? GAME_CONSTANTS.JAIL_BAR_SHORT_SIDE : GAME_CONSTANTS.JAIL_BAR_LONG_SIDE;
             const speed = (Math.random() * 50 + 25) * currentLevelProps.jailBarBaseSpeed;
