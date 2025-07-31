@@ -107,8 +107,7 @@
             BACKGROUND_FADE_DURATION: 1.5,
             SAFE_SPAWN_ATTEMPTS: 50,
             CANVAS_PADDING: 20,
-            // CHANGED: Added a constant for the score text Y-position.
-            SCORE_TEXT_Y_OFFSET: 50,
+            SCORE_TEXT_Y_OFFSET: 75,
         };
 
         // --- Game State Variables ---
@@ -469,7 +468,6 @@
                     entities.powerups.forEach(p => p.draw(ctx));
                     entities.ghosts.forEach(g => g.draw(ctx));
                     entities.player?.draw(ctx);
-                    // CHANGED: Using the new constant to position the score text higher.
                     drawText(`Burek: ${scoreInCurrentLevel}/${currentLevelProps.breadNeeded}  |  Level: ${level}  |  Total: ${score}`,
                         canvas.width / 2, canvas.height - GAME_CONSTANTS.SCORE_TEXT_Y_OFFSET, '20px Avenir Next', 'white');
                 }
@@ -602,14 +600,19 @@
                 ghostInitialSpeedFactor: base.ghostInitialSpeedFactor,
             };
         }
-
-        function spawnInSafeLocation(newEntity, ...safeZones) {
+        
+        // CHANGED: Added a parameter to control collision checks for a more reliable spawn.
+        function spawnInSafeLocation(newEntity, checkAgainstBars, ...safeZones) {
             for (let i = 0; i < GAME_CONSTANTS.SAFE_SPAWN_ATTEMPTS; i++) {
                 newEntity.x = Math.random() * (canvas.width - 80) + 40;
                 newEntity.y = Math.random() * (canvas.height - 80) + 40;
                 
-                const collides = safeZones.some(zone => utils.checkCollision(newEntity, zone)) || 
-                                 entities.jailBars.some(bar => utils.checkCollision(newEntity, bar));
+                let collides = safeZones.some(zone => utils.checkCollision(newEntity, zone));
+                
+                if (checkAgainstBars) {
+                    collides = collides || entities.jailBars.some(bar => utils.checkCollision(newEntity, bar));
+                }
+
                 if (!collides) return true;
             }
             console.warn("Could not find safe spawn position for entity.");
@@ -618,7 +621,8 @@
 
         function spawnGhost(playerSafeZone) {
             const newGhost = new Ghost(0, 0, currentLevelProps.ghostBaseSpeed, currentLevelProps.ghostTint);
-            if (spawnInSafeLocation(newGhost, playerSafeZone)) {
+            // Ghosts must avoid bars.
+            if (spawnInSafeLocation(newGhost, true, playerSafeZone)) {
                 entities.ghosts.push(newGhost);
             }
         }
@@ -630,7 +634,9 @@
             const speed = (Math.random() * 50 + 25) * currentLevelProps.jailBarBaseSpeed;
             const angle = Math.random() * Math.PI * 2;
             const newBar = new JailBar(0, 0, width, height, currentLevelProps.jailBarColor, Math.cos(angle) * speed, Math.sin(angle) * speed);
-            if (spawnInSafeLocation(newBar, playerSafeZone)) {
+            
+            // Jail bars DON'T need to avoid other jail bars to prevent spawning locks.
+            if (spawnInSafeLocation(newBar, false, playerSafeZone)) {
                 entities.jailBars.push(newBar);
             }
         }
@@ -638,7 +644,8 @@
         function spawnBread() {
             const newBread = new Bread(0, 0, currentLevelProps.breadTint);
             const playerSafeZone = { ...entities.player, width: 120, height: 120 };
-            if (spawnInSafeLocation(newBread, playerSafeZone, ...entities.breads)) {
+             // Bread must avoid bars.
+            if (spawnInSafeLocation(newBread, true, playerSafeZone, ...entities.breads)) {
                 entities.breads.push(newBread);
             }
         }
@@ -646,7 +653,8 @@
         function spawnPowerup() {
             const newPowerup = new Powerup(0, 0, currentLevelProps.powerupTint);
             const playerSafeZone = { ...entities.player, width: 120, height: 120 };
-            if (spawnInSafeLocation(newPowerup, playerSafeZone, ...entities.powerups)) {
+             // Powerups must avoid bars.
+            if (spawnInSafeLocation(newPowerup, true, playerSafeZone, ...entities.powerups)) {
                 entities.powerups.push(newPowerup);
             }
         }
