@@ -203,7 +203,6 @@
                 'https://tippytoesarch.github.io/bikaviewer/assets/qr9.png',
                 'https://tippytoesarch.github.io/bikaviewer/assets/qr10.png'
             ],
-            // FIXED: Changed sound paths to full URLs
             biteSound: 'https://tippytoesarch.github.io/bikaviewer/assets/bite.mp3',
             gameOverSound: 'https://tippytoesarch.github.io/bikaviewer/assets/game-over.mp3',
             powerupSound: 'https://tippytoesarch.github.io/bikaviewer/assets/power-up.mp3',
@@ -783,6 +782,7 @@
                     if (currentQrImage) { // Use the stored QR image
                         ctx.drawImage(currentQrImage, canvas.width / 2 - 125, canvas.height / 2 - 125, 250, 250);
                     } else {
+                        // Fallback if currentQrImage somehow isn't set or loaded
                         drawText('QR Image Missing', canvas.width / 2, canvas.height / 2, '20px Avenir Next', 'red');
                     }
                 } else if (gameState === 'GAME_OVER') {
