@@ -98,14 +98,12 @@
             BREAD_HEIGHT: 18,
             POWERUP_WIDTH: 30,
             POWERUP_HEIGHT: 30,
-            // CHANGED: Made jail bars even smaller.
             JAIL_BAR_LONG_SIDE: 50,
             JAIL_BAR_SHORT_SIDE: 5,
             ASPECT_RATIO: 16 / 9,
             GAME_OVER_DURATION: 3.5,
             LEVEL_TRANSITION_DURATION: 10.0,
             SPEED_BOOST_DURATION: 5.0,
-            // CHANGED: Removed animation duration as it's no longer used.
             BACKGROUND_FADE_DURATION: 1.5,
             SAFE_SPAWN_ATTEMPTS: 50,
             CANVAS_PADDING: 20,
@@ -133,16 +131,11 @@
             bread: 'https://tippytoesarch.github.io/bikaviewer/assets/bread.png',
             powerup: 'https://tippytoesarch.github.io/bikaviewer/assets/powerup.png',
             qrImages: [
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr1.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr2.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr3.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr4.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr5.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr6.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr7.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr8.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr9.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr10.png'
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr1.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr2.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr3.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr4.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr5.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr6.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr7.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr8.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr9.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr10.png'
             ],
             biteSound: 'https://tippytoesarch.github.io/bikaviewer/assets/bite.mp3',
             gameOverSound: 'https://tippytoesarch.github.io/bikaviewer/assets/game-over.mp3',
@@ -155,7 +148,8 @@
         const levelProperties = {
             1: { backgroundColor: '#003300', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: 'gray', numGhosts: 3, ghostBaseSpeed: 90, numJailBars: 8, jailBarBaseSpeed: 1.0, breadSpawnInterval: 2.0, powerupSpawnInterval: 12.0, breadNeeded: 10, playerSafeRadius: 80, ghostActivationDelay: 0.0, ghostInitialSpeedFactor: 1.0, },
             2: { backgroundColor: '#202820', playerTint: 'rgb(255, 204, 204)', ghostTint: 'rgb(153, 128, 102)', breadTint: 'rgb(255, 178, 128)', powerupTint: 'rgb(204, 255, 204)', jailBarColor: '#404040', numGhosts: 4, ghostBaseSpeed: 120, numJailBars: 10, jailBarBaseSpeed: 1.2, breadSpawnInterval: 1.8, powerupSpawnInterval: 10.0, breadNeeded: 20, playerSafeRadius: 100, ghostActivationDelay: 0.5, ghostInitialSpeedFactor: 0.8, },
-            3: { backgroundColor: 'rgb(24, 32, 40)', playerTint: 'rgb(204, 204, 255)', ghostTint: 'rgb(128, 153, 153)', breadTint: 'rgb(178, 128, 178)', powerupTint: 'rgb(255, 255, 204)', jailBarColor: '#303050', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
+            // CHANGED: Level 3 now uses the purple background and original sprite colors (by setting tint to 'white').
+            3: { backgroundColor: '#4C2A85', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: '#D3D3D3', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
         };
 
         // --- Utility Functions ---
@@ -189,16 +183,21 @@
                 Object.assign(this, { x, y, width, height, color, flipX: false });
             }
             draw(ctx, image, tintColor) {
+                if (!tintColor || tintColor === 'white') {
+                    ctx.save();
+                    ctx.translate(this.x, this.y);
+                    if (this.flipX) ctx.scale(-1, 1);
+                    ctx.drawImage(image, -this.width / 2, -this.height / 2, this.width, this.height);
+                    ctx.restore();
+                    return;
+                }
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 if (this.flipX) ctx.scale(-1, 1);
+                ctx.fillStyle = tintColor;
+                ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+                ctx.globalCompositeOperation = 'destination-in';
                 ctx.drawImage(image, -this.width / 2, -this.height / 2, this.width, this.height);
-                
-                if (tintColor && tintColor.toLowerCase() !== 'white' && tintColor !== '#ffffff') {
-                    ctx.globalCompositeOperation = 'source-atop';
-                    ctx.fillStyle = tintColor;
-                    ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
-                }
                 ctx.restore();
             }
         }
@@ -300,7 +299,6 @@
             }
         }
         
-        // CHANGED: Simplified Collectible class by removing animation properties.
         class Collectible extends Entity {
             constructor(x, y, width, height, color) {
                 super(x, y, width, height, color);
@@ -312,7 +310,6 @@
                 super(x, y, GAME_CONSTANTS.BREAD_WIDTH, GAME_CONSTANTS.BREAD_HEIGHT, color);
             }
             draw(ctx) {
-                // CHANGED: Removed scaling logic as animation is gone.
                 super.draw(ctx, loadedAssets.bread, currentLevelProps.breadTint);
             }
         }
@@ -437,7 +434,6 @@
                             return;
                         }
                         
-                        // CHANGED: New logic for instant item collection and removal.
                         const breadToKeep = [];
                         for(const bread of entities.breads) {
                             if (utils.checkCollision(entities.player, bread)) {
@@ -587,7 +583,11 @@
             const diff = levelNum - 3;
             return {
                 backgroundColor: `rgb(${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50 + 20)})`,
-                playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: 'gray',
+                playerTint: `rgb(${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)})`,
+                ghostTint: `rgb(${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)})`,
+                breadTint: `rgb(255, ${Math.floor(Math.random() * 100 + 100)}, ${Math.floor(Math.random() * 50)})`,
+                powerupTint: `rgb(${Math.floor(Math.random() * 100)}, 255, ${Math.floor(Math.random() * 100)})`,
+                jailBarColor: 'gray',
                 numGhosts: Math.min(15, base.numGhosts + diff),
                 ghostBaseSpeed: base.ghostBaseSpeed + diff * 15,
                 numJailBars: Math.min(25, base.numJailBars + diff * 2),
