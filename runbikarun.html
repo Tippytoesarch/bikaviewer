@@ -114,7 +114,7 @@
         };
         let inputPos = { x: null, y: null, active: false };
         let currentLevelProps = {};
-        let audioInitialized = false; // FIX: For mobile audio compatibility
+        let audioInitialized = false;
 
         // --- Asset Management ---
         const assetPaths = {
@@ -135,13 +135,12 @@
             levelUpSound: 'https://tippytoesarch.github.io/bikaviewer/assets/level-up.mp3'
         };
         const loadedAssets = {};
-        const tintedAssetCache = {};
-
-        // --- Level Properties ---
+        
+        // --- Level Properties (Simplified: No tinting) ---
         const levelProperties = {
-            1: { backgroundColor: '#003300', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: 'gray', numGhosts: 3, ghostBaseSpeed: 90, numJailBars: 8, jailBarBaseSpeed: 1.0, breadSpawnInterval: 2.0, powerupSpawnInterval: 12.0, breadNeeded: 10, playerSafeRadius: 80, ghostActivationDelay: 0.0, ghostInitialSpeedFactor: 1.0, },
-            2: { backgroundColor: '#202820', playerTint: 'rgb(255, 204, 204)', ghostTint: 'rgb(153, 128, 102)', breadTint: 'rgb(255, 178, 128)', powerupTint: 'rgb(204, 255, 204)', jailBarColor: '#404040', numGhosts: 4, ghostBaseSpeed: 120, numJailBars: 10, jailBarBaseSpeed: 1.2, breadSpawnInterval: 1.8, powerupSpawnInterval: 10.0, breadNeeded: 20, playerSafeRadius: 100, ghostActivationDelay: 0.5, ghostInitialSpeedFactor: 0.8, },
-            3: { backgroundColor: '#4C2A85', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: '#D3D3D3', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
+            1: { backgroundColor: '#003300', jailBarColor: 'gray', numGhosts: 3, ghostBaseSpeed: 90, numJailBars: 8, jailBarBaseSpeed: 1.0, breadSpawnInterval: 2.0, powerupSpawnInterval: 12.0, breadNeeded: 10, playerSafeRadius: 80, ghostActivationDelay: 0.0, ghostInitialSpeedFactor: 1.0, },
+            2: { backgroundColor: '#202820', jailBarColor: '#404040', numGhosts: 4, ghostBaseSpeed: 120, numJailBars: 10, jailBarBaseSpeed: 1.2, breadSpawnInterval: 1.8, powerupSpawnInterval: 10.0, breadNeeded: 20, playerSafeRadius: 100, ghostActivationDelay: 0.5, ghostInitialSpeedFactor: 0.8, },
+            3: { backgroundColor: '#4C2A85', jailBarColor: '#D3D3D3', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
         };
 
         // --- Utility Functions ---
@@ -161,7 +160,7 @@
                 return (rect1.x - rect1.width / 2 < rect2.x + rect2.width / 2 && rect1.x + rect1.width / 2 > rect2.x - rect2.width / 2 && rect1.y - rect1.height / 2 < rect2.y + rect2.height / 2 && rect1.y + rect1.height / 2 > rect2.y - rect2.height / 2);
             },
             playSound(soundKey) {
-                if (!audioInitialized) return; // FIX: Don't play if audio isn't unlocked
+                if (!audioInitialized) return;
                 const audio = loadedAssets[soundKey];
                 if (audio) {
                     audio.currentTime = 0;
@@ -175,41 +174,12 @@
             constructor(x, y, width, height, color) {
                 Object.assign(this, { x, y, width, height, color, flipX: false });
             }
-            draw(ctx, image, tintColor) {
+            // **PERFORMANCE FIX**: Simplified draw method, removed tinting.
+            draw(ctx, image) {
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 if (this.flipX) ctx.scale(-1, 1);
-
-                if (!tintColor || tintColor === 'white' || !image.src) {
-                    ctx.drawImage(image, -this.width / 2, -this.height / 2, this.width, this.height);
-                } else {
-                    const cacheKey = image.src + '_' + tintColor;
-                    let tintedImage = tintedAssetCache[cacheKey];
-
-                    if (!tintedImage) {
-                        const offscreenCanvas = document.createElement('canvas');
-                        const offscreenCtx = offscreenCanvas.getContext('2d');
-                        offscreenCanvas.width = image.width;
-                        offscreenCanvas.height = image.height;
-                        offscreenCtx.drawImage(image, 0, 0);
-                        const imageData = offscreenCtx.getImageData(0, 0, image.width, image.height);
-                        const data = imageData.data;
-                        const tintRgb = utils.parseColorToRGB(tintColor);
-
-                        for (let i = 0; i < data.length; i += 4) {
-                            const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
-                            if (a > 0) {
-                                data[i] = (r / 255) * tintRgb[0];
-                                data[i + 1] = (g / 255) * tintRgb[1];
-                                data[i + 2] = (b / 255) * tintRgb[2];
-                            }
-                        }
-                        offscreenCtx.putImageData(imageData, 0, 0);
-                        tintedAssetCache[cacheKey] = offscreenCanvas;
-                        tintedImage = offscreenCanvas;
-                    }
-                    ctx.drawImage(tintedImage, -this.width / 2, -this.height / 2, this.width, this.height);
-                }
+                ctx.drawImage(image, -this.width / 2, -this.height / 2, this.width, this.height);
                 ctx.restore();
             }
         }
@@ -228,13 +198,19 @@
                 if (inputPos.active) {
                     const dx = inputPos.x - this.x;
                     const dy = inputPos.y - this.y;
+                    
+                    // **FLIPPING FIX**: More robust logic for flipping.
+                    // Only change orientation if there's significant horizontal movement.
+                    if (Math.abs(dx) > 1) {
+                        // Assumes default sprite faces LEFT. Flips to face RIGHT.
+                        this.flipX = dx > 0;
+                    }
+
                     if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
                         const angle = Math.atan2(dy, dx);
                         let potentialX = this.x + Math.cos(angle) * this.speed * dt;
                         let potentialY = this.y + Math.sin(angle) * this.speed * dt;
-
-                        this.flipX = dx < 0;
-
+                        
                         const originalX = this.x, originalY = this.y;
                         this.x = potentialX;
                         if (entities.jailBars.some(bar => utils.checkCollision(this, bar))) this.x = originalX;
@@ -247,7 +223,7 @@
                 this.y = Math.max(pad + this.height / 2, Math.min(this.y, canvas.height - pad - this.height / 2));
             }
             draw(ctx) {
-                super.draw(ctx, loadedAssets.player, currentLevelProps.playerTint);
+                super.draw(ctx, loadedAssets.player);
             }
             activateSpeedBoost() {
                 this.speed = GAME_CONSTANTS.PLAYER_BOOST_SPEED;
@@ -281,15 +257,21 @@
 
                 const dx = player.x - this.x;
                 const dy = player.y - this.y;
+
+                // **FLIPPING FIX**: More robust logic for flipping.
+                if (Math.abs(dx) > 0.1) {
+                    // Assumes default sprite faces LEFT. Flips to face RIGHT.
+                    this.flipX = dx > 0;
+                }
+                
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > 1) {
                     this.x += (dx / dist) * currentSpeed * dt;
                     this.y += (dy / dist) * currentSpeed * dt;
                 }
-                this.flipX = dx < 0;
             }
             draw(ctx) {
-                super.draw(ctx, loadedAssets.cop, currentLevelProps.ghostTint);
+                super.draw(ctx, loadedAssets.cop);
             }
         }
 
@@ -318,20 +300,20 @@
         }
 
         class Bread extends Collectible {
-            constructor(x, y, color) {
-                super(x, y, GAME_CONSTANTS.BREAD_WIDTH, GAME_CONSTANTS.BREAD_HEIGHT, color);
+            constructor(x, y) {
+                super(x, y, GAME_CONSTANTS.BREAD_WIDTH, GAME_CONSTANTS.BREAD_HEIGHT);
             }
             draw(ctx) {
-                super.draw(ctx, loadedAssets.bread, currentLevelProps.breadTint);
+                super.draw(ctx, loadedAssets.bread);
             }
         }
 
         class Powerup extends Collectible {
-            constructor(x, y, color) {
-                super(x, y, GAME_CONSTANTS.POWERUP_WIDTH, GAME_CONSTANTS.POWERUP_HEIGHT, color);
+            constructor(x, y) {
+                super(x, y, GAME_CONSTANTS.POWERUP_WIDTH, GAME_CONSTANTS.POWERUP_HEIGHT);
             }
             draw(ctx) {
-                super.draw(ctx, loadedAssets.powerup, currentLevelProps.powerupTint);
+                super.draw(ctx, loadedAssets.powerup);
             }
         }
 
@@ -562,9 +544,8 @@
             for (let i = 0; i < currentLevelProps.numJailBars; i++) spawnJailBar(safeZone);
             for (let i = 0; i < currentLevelProps.numGhosts; i++) spawnGhost(safeZone);
 
-            // FIX: Spawn initial bread outside of the player's safe zone to prevent instant collection.
             for (let i = 0; i < currentLevelProps.breadNeeded; i++) {
-                const newBread = new Bread(0, 0, currentLevelProps.breadTint);
+                const newBread = new Bread(0, 0);
                 if (spawnInSafeLocation(newBread, safeZone, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
                     entities.breads.push(newBread);
                 }
@@ -577,10 +558,6 @@
             const diff = levelNum - 3;
             return {
                 backgroundColor: `rgb(${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50 + 20)})`,
-                playerTint: `rgb(${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)})`,
-                ghostTint: `rgb(${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)})`,
-                breadTint: `rgb(255, ${Math.floor(Math.random() * 100 + 100)}, ${Math.floor(Math.random() * 50)})`,
-                powerupTint: `rgb(${Math.floor(Math.random() * 100)}, 255, ${Math.floor(Math.random() * 100)})`,
                 jailBarColor: 'gray',
                 numGhosts: Math.min(15, base.numGhosts + diff),
                 ghostBaseSpeed: base.ghostBaseSpeed + diff * 15,
@@ -606,7 +583,7 @@
         }
 
         function spawnGhost(playerSafeZone) {
-            const newGhost = new Ghost(0, 0, currentLevelProps.ghostBaseSpeed, currentLevelProps.ghostTint);
+            const newGhost = new Ghost(0, 0, currentLevelProps.ghostBaseSpeed, 'white');
             if (spawnInSafeLocation(newGhost, playerSafeZone, ...entities.jailBars)) {
                 entities.ghosts.push(newGhost);
             }
@@ -631,14 +608,14 @@
         }
         
         function spawnBread() {
-            const newBread = new Bread(0, 0, currentLevelProps.breadTint);
+            const newBread = new Bread(0, 0);
             if (spawnInSafeLocation(newBread, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
                 entities.breads.push(newBread);
             }
         }
 
         function spawnPowerup() {
-            const newPowerup = new Powerup(0, 0, currentLevelProps.powerupTint);
+            const newPowerup = new Powerup(0, 0);
             if (spawnInSafeLocation(newPowerup, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
                 entities.powerups.push(newPowerup);
             }
@@ -676,20 +653,17 @@
             const dt = (timestamp - lastTime) / 1000;
             lastTime = timestamp;
 
-            if (currentState) {
+            if (currentState && currentState.update && currentState.draw) {
                 clearCanvas();
-                currentState.update?.(dt);
-                currentState.draw?.();
+                currentState.update(dt);
+                currentState.draw();
             }
             
             requestAnimationFrame(gameLoop);
         }
         
-        // --- FIX: Function to unlock audio on mobile devices ---
         function initAudio() {
             if (audioInitialized) return;
-            // A tiny, silent sound is played on the first user interaction.
-            // This satisfies browser security policies.
             Object.values(loadedAssets).forEach(asset => {
                 if (asset instanceof HTMLAudioElement) {
                     asset.play();
@@ -705,7 +679,7 @@
         window.addEventListener('resize', resizeCanvas);
         
         window.addEventListener('pointerdown', (e) => {
-            initAudio(); // Unlock audio on the first tap
+            initAudio();
             const rect = canvas.getBoundingClientRect();
             inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
             inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
@@ -716,7 +690,6 @@
             inputPos.active = false;
         });
 
-        // FIX: Correctly track pointer/finger position at all times.
         window.addEventListener('pointermove', (e) => {
             const rect = canvas.getBoundingClientRect();
             inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
