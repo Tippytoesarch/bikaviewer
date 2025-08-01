@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Run Bika Run! (Final)</title>
     <style>
-        /* MODIFIED: Simplified body and canvas for fullscreen */
         body {
             margin: 0;
             overflow: hidden;
@@ -92,8 +91,6 @@
             POWERUP_HEIGHT: 30,
             JAIL_BAR_LONG_SIDE: 50,
             JAIL_BAR_SHORT_SIDE: 5,
-            // REMOVED: Aspect ratio constant is no longer needed.
-            // ASPECT_RATIO: 16 / 9,
             GAME_OVER_DURATION: 3.5,
             LEVEL_TRANSITION_DURATION: 10.0,
             SPEED_BOOST_DURATION: 5.0,
@@ -117,6 +114,7 @@
         };
         let inputPos = { x: null, y: null, active: false };
         let currentLevelProps = {};
+        let audioInitialized = false; // FIX: For mobile audio compatibility
 
         // --- Asset Management ---
         const assetPaths = {
@@ -163,6 +161,7 @@
                 return (rect1.x - rect1.width / 2 < rect2.x + rect2.width / 2 && rect1.x + rect1.width / 2 > rect2.x - rect2.width / 2 && rect1.y - rect1.height / 2 < rect2.y + rect2.height / 2 && rect1.y + rect1.height / 2 > rect2.y - rect2.height / 2);
             },
             playSound(soundKey) {
+                if (!audioInitialized) return; // FIX: Don't play if audio isn't unlocked
                 const audio = loadedAssets[soundKey];
                 if (audio) {
                     audio.currentTime = 0;
@@ -357,7 +356,7 @@
                         const handleError = (e) => {
                             console.warn(`Failed to load: ${path}`, e);
                             loadedCount++;
-                            resolve(); // Resolve even on error to not block loading
+                            resolve();
                         };
 
                         if (path.endsWith('.png')) {
@@ -371,7 +370,7 @@
                             const timeoutId = setTimeout(() => {
                                 console.warn(`Audio timed out: ${path}. Continuing...`);
                                 handleSuccess(null);
-                            }, 2000);
+                            }, 3000);
                             audio.oncanplaythrough = () => { clearTimeout(timeoutId); handleSuccess(audio); };
                             audio.onerror = (e) => { clearTimeout(timeoutId); handleError(e); };
                         }
@@ -562,7 +561,14 @@
             
             for (let i = 0; i < currentLevelProps.numJailBars; i++) spawnJailBar(safeZone);
             for (let i = 0; i < currentLevelProps.numGhosts; i++) spawnGhost(safeZone);
-            for (let i = 0; i < currentLevelProps.breadNeeded; i++) spawnBread();
+
+            // FIX: Spawn initial bread outside of the player's safe zone to prevent instant collection.
+            for (let i = 0; i < currentLevelProps.breadNeeded; i++) {
+                const newBread = new Bread(0, 0, currentLevelProps.breadTint);
+                if (spawnInSafeLocation(newBread, safeZone, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
+                    entities.breads.push(newBread);
+                }
+            }
         }
 
         function getDynamicLevelProps(levelNum) {
@@ -639,10 +645,13 @@
         }
 
         // --- Canvas & Rendering ---
-        // MODIFIED: This function now resizes the canvas to fill the entire window.
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            if (currentState && currentState.draw) {
+                clearCanvas();
+                currentState.draw();
+            }
         }
 
         function drawText(text, x, y, font, color, align = 'center', alpha = 1.0) {
@@ -657,7 +666,7 @@
         }
 
         function clearCanvas() {
-            ctx.fillStyle = canvas.style.backgroundColor;
+            ctx.fillStyle = canvas.style.backgroundColor || '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
@@ -675,24 +684,43 @@
             
             requestAnimationFrame(gameLoop);
         }
+        
+        // --- FIX: Function to unlock audio on mobile devices ---
+        function initAudio() {
+            if (audioInitialized) return;
+            // A tiny, silent sound is played on the first user interaction.
+            // This satisfies browser security policies.
+            Object.values(loadedAssets).forEach(asset => {
+                if (asset instanceof HTMLAudioElement) {
+                    asset.play();
+                    asset.pause();
+                    asset.currentTime = 0;
+                }
+            });
+            audioInitialized = true;
+            console.log("Audio unlocked.");
+        }
 
         // --- Event Listeners & Initialization ---
         window.addEventListener('resize', resizeCanvas);
+        
         window.addEventListener('pointerdown', (e) => {
+            initAudio(); // Unlock audio on the first tap
             const rect = canvas.getBoundingClientRect();
             inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
             inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
             inputPos.active = true;
         });
+
         window.addEventListener('pointerup', () => {
             inputPos.active = false;
         });
+
+        // FIX: Correctly track pointer/finger position at all times.
         window.addEventListener('pointermove', (e) => {
-            if (inputPos.active) {
-                const rect = canvas.getBoundingClientRect();
-                inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
-                inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
-            }
+            const rect = canvas.getBoundingClientRect();
+            inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
         });
 
         // Initialize the game
