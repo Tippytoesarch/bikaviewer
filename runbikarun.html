@@ -144,13 +144,11 @@
             levelUpSound: 'https://tippytoesarch.github.io/bikaviewer/assets/level-up.mp3'
         };
         const loadedAssets = {};
-        // CHANGED: Added a cache for tinted images to improve performance.
         const tintedAssetCache = {};
 
         // --- Level Properties ---
         const levelProperties = {
             1: { backgroundColor: '#003300', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: 'gray', numGhosts: 3, ghostBaseSpeed: 90, numJailBars: 8, jailBarBaseSpeed: 1.0, breadSpawnInterval: 2.0, powerupSpawnInterval: 12.0, breadNeeded: 10, playerSafeRadius: 80, ghostActivationDelay: 0.0, ghostInitialSpeedFactor: 1.0, },
-            // CHANGED: Re-enabled tints now that the browser bug is fixed.
             2: { backgroundColor: '#202820', playerTint: 'rgb(255, 204, 204)', ghostTint: 'rgb(153, 128, 102)', breadTint: 'rgb(255, 178, 128)', powerupTint: 'rgb(204, 255, 204)', jailBarColor: '#404040', numGhosts: 4, ghostBaseSpeed: 120, numJailBars: 10, jailBarBaseSpeed: 1.2, breadSpawnInterval: 1.8, powerupSpawnInterval: 10.0, breadNeeded: 20, playerSafeRadius: 100, ghostActivationDelay: 0.5, ghostInitialSpeedFactor: 0.8, },
             3: { backgroundColor: '#4C2A85', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: '#D3D3D3', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
         };
@@ -185,7 +183,7 @@
             constructor(x, y, width, height, color) {
                 Object.assign(this, { x, y, width, height, color, flipX: false });
             }
-            // CHANGED: Switched to a universally compatible off-screen canvas method for tinting.
+            // MODIFIED: This is the updated draw method for reliable tinting.
             draw(ctx, image, tintColor) {
                 ctx.save();
                 ctx.translate(this.x, this.y);
@@ -202,10 +200,34 @@
                         const offscreenCtx = offscreenCanvas.getContext('2d');
                         offscreenCanvas.width = image.width;
                         offscreenCanvas.height = image.height;
-                        offscreenCtx.fillStyle = tintColor;
-                        offscreenCtx.fillRect(0, 0, image.width, image.height);
-                        offscreenCtx.globalCompositeOperation = 'destination-in';
+
+                        // Draw the original image onto the off-screen canvas
                         offscreenCtx.drawImage(image, 0, 0);
+
+                        // Get the pixel data
+                        const imageData = offscreenCtx.getImageData(0, 0, image.width, image.height);
+                        const data = imageData.data;
+                        const tintRgb = utils.parseColorToRGB(tintColor);
+
+                        // Loop through all pixels and apply the tint
+                        for (let i = 0; i < data.length; i += 4) {
+                            const r = data[i];
+                            const g = data[i + 1];
+                            const b = data[i + 2];
+                            const a = data[i + 3];
+
+                            // Only apply the tint to non-transparent pixels
+                            if (a > 0) {
+                                data[i] = (r / 255) * tintRgb[0];
+                                data[i + 1] = (g / 255) * tintRgb[1];
+                                data[i + 2] = (b / 255) * tintRgb[2];
+                            }
+                        }
+
+                        // Put the tinted pixel data back onto the off-screen canvas
+                        offscreenCtx.putImageData(imageData, 0, 0);
+
+                        // Cache the newly created tinted image
                         tintedAssetCache[cacheKey] = offscreenCanvas;
                         tintedImage = offscreenCanvas;
                     }
@@ -596,7 +618,6 @@
             const diff = levelNum - 3;
             return {
                 backgroundColor: `rgb(${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50 + 20)})`,
-                // CHANGED: Re-enabled procedural tints now that the browser bug is fixed.
                 playerTint: `rgb(${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)})`,
                 ghostTint: `rgb(${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)})`,
                 breadTint: `rgb(255, ${Math.floor(Math.random() * 100 + 100)}, ${Math.floor(Math.random() * 50)})`,
@@ -652,105 +673,89 @@
                     return;
                 }
             }
-            console.warn("Could not find a safe spawn position for a jail bar.");
         }
         
         function spawnBread() {
             const newBread = new Bread(0, 0, currentLevelProps.breadTint);
-            const playerSafeZone = { ...entities.player, width: 120, height: 120 };
-            if (spawnInSafeLocation(newBread, playerSafeZone, ...entities.breads, ...entities.jailBars)) {
+            if (spawnInSafeLocation(newBread, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
                 entities.breads.push(newBread);
             }
         }
-        
+
         function spawnPowerup() {
             const newPowerup = new Powerup(0, 0, currentLevelProps.powerupTint);
-            const playerSafeZone = { ...entities.player, width: 120, height: 120 };
-            if (spawnInSafeLocation(newPowerup, playerSafeZone, ...entities.powerups, ...entities.jailBars)) {
+            if (spawnInSafeLocation(newPowerup, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
                 entities.powerups.push(newPowerup);
             }
         }
 
-        // --- Drawing & Main Loop ---
-        function drawText(text, x, y, font, color, align = 'center', alpha = 1) {
+        // --- Canvas & Rendering ---
+        function resizeCanvas() {
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            const targetWidth = windowHeight * GAME_CONSTANTS.ASPECT_RATIO;
+            const targetHeight = windowWidth / GAME_CONSTANTS.ASPECT_RATIO;
+            
+            if (windowWidth / windowHeight > GAME_CONSTANTS.ASPECT_RATIO) {
+                canvas.height = windowHeight;
+                canvas.width = targetWidth;
+            } else {
+                canvas.width = windowWidth;
+                canvas.height = targetHeight;
+            }
+        }
+
+        function drawText(text, x, y, font, color, align = 'center', alpha = 1.0) {
+            ctx.save();
+            ctx.globalAlpha = alpha;
             ctx.font = font;
             ctx.fillStyle = color;
             ctx.textAlign = align;
             ctx.textBaseline = 'middle';
-            ctx.globalAlpha = alpha;
             ctx.fillText(text, x, y);
-            ctx.globalAlpha = 1;
+            ctx.restore();
         }
 
-        function resizeCanvas() {
-            let newWidth = window.innerWidth;
-            let newHeight = window.innerHeight;
-
-            if (newWidth / newHeight > 1 / GAME_CONSTANTS.ASPECT_RATIO) {
-                 newWidth = newHeight * (1 / GAME_CONSTANTS.ASPECT_RATIO);
-            } else {
-                newHeight = newWidth * GAME_CONSTANTS.ASPECT_RATIO;
-            }
-
-            canvas.width = newWidth;
-            canvas.height = newHeight;
+        function clearCanvas() {
+            ctx.fillStyle = canvas.style.backgroundColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
-        
+
+        // --- Main Game Loop ---
         let lastTime = 0;
-        function gameLoop(currentTime) {
-            const dt = (currentTime - lastTime) / 1000 || 0;
-            lastTime = currentTime;
+        function gameLoop(timestamp) {
+            const dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            if (currentState?.update) currentState.update(dt);
-            if (currentState?.draw) currentState.draw();
-
-            requestAnimationFrame(gameLoop);
-        }
-
-        // --- Input Handling ---
-        function getEventPos(e) {
-            const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: (clientX - rect.left) * (canvas.width / rect.width),
-                y: (clientY - rect.top) * (canvas.height / rect.height)
-            };
-        }
-        function handleInputStart(e) {
-            e.preventDefault();
-            inputPos.active = true;
-            Object.assign(inputPos, getEventPos(e));
-        }
-        function handleInputMove(e) {
-            e.preventDefault();
-            if (inputPos.active) {
-                Object.assign(inputPos, getEventPos(e));
+            if (currentState) {
+                clearCanvas();
+                currentState.update?.(dt);
+                currentState.draw?.();
             }
-        }
-        function handleInputEnd(e) {
-            e.preventDefault();
-            inputPos.active = false;
-        }
-
-        // --- Event Listeners ---
-        window.addEventListener('resize', resizeCanvas);
-        canvas.addEventListener('touchstart', handleInputStart, { passive: false });
-        canvas.addEventListener('touchmove', handleInputMove, { passive: false });
-        canvas.addEventListener('touchend', handleInputEnd);
-        canvas.addEventListener('touchcancel', handleInputEnd);
-        canvas.addEventListener('mousedown', handleInputStart);
-        canvas.addEventListener('mousemove', handleInputMove);
-        canvas.addEventListener('mouseup', handleInputEnd);
-        canvas.addEventListener('mouseleave', handleInputEnd);
-
-        // --- Start Game ---
-        window.onload = () => {
-            changeState('LOADING');
+            
             requestAnimationFrame(gameLoop);
-        };
+        }
+
+        // --- Event Listeners & Initialization ---
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('pointerdown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            inputPos.active = true;
+        });
+        window.addEventListener('pointerup', () => {
+            inputPos.active = false;
+        });
+        window.addEventListener('pointermove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+        });
+
+        // Initialize the game
+        changeState('LOADING');
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
