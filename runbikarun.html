@@ -148,7 +148,8 @@
         // --- Level Properties ---
         const levelProperties = {
             1: { backgroundColor: '#003300', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: 'gray', numGhosts: 3, ghostBaseSpeed: 90, numJailBars: 8, jailBarBaseSpeed: 1.0, breadSpawnInterval: 2.0, powerupSpawnInterval: 12.0, breadNeeded: 10, playerSafeRadius: 80, ghostActivationDelay: 0.0, ghostInitialSpeedFactor: 1.0, },
-            2: { backgroundColor: '#202820', playerTint: 'rgb(255, 204, 204)', ghostTint: 'rgb(153, 128, 102)', breadTint: 'rgb(255, 178, 128)', powerupTint: 'rgb(204, 255, 204)', jailBarColor: '#404040', numGhosts: 4, ghostBaseSpeed: 120, numJailBars: 10, jailBarBaseSpeed: 1.2, breadSpawnInterval: 1.8, powerupSpawnInterval: 10.0, breadNeeded: 20, playerSafeRadius: 100, ghostActivationDelay: 0.5, ghostInitialSpeedFactor: 0.8, },
+            // CHANGED: Disabled tinting on Level 2 by setting tints to 'white' to fix loading bug.
+            2: { backgroundColor: '#202820', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: '#404040', numGhosts: 4, ghostBaseSpeed: 120, numJailBars: 10, jailBarBaseSpeed: 1.2, breadSpawnInterval: 1.8, powerupSpawnInterval: 10.0, breadNeeded: 20, playerSafeRadius: 100, ghostActivationDelay: 0.5, ghostInitialSpeedFactor: 0.8, },
             3: { backgroundColor: '#4C2A85', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: '#D3D3D3', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
         };
 
@@ -583,10 +584,11 @@
             const diff = levelNum - 3;
             return {
                 backgroundColor: `rgb(${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50 + 20)})`,
-                playerTint: `rgb(${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)})`,
-                ghostTint: `rgb(${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)})`,
-                breadTint: `rgb(255, ${Math.floor(Math.random() * 100 + 100)}, ${Math.floor(Math.random() * 50)})`,
-                powerupTint: `rgb(${Math.floor(Math.random() * 100)}, 255, ${Math.floor(Math.random() * 100)})`,
+                // CHANGED: Disabled tinting on procedural levels to fix loading bug.
+                playerTint: 'white',
+                ghostTint: 'white',
+                breadTint: 'white',
+                powerupTint: 'white',
                 jailBarColor: 'gray',
                 numGhosts: Math.min(15, base.numGhosts + diff),
                 ghostBaseSpeed: base.ghostBaseSpeed + diff * 15,
@@ -601,7 +603,6 @@
             };
         }
         
-        // CHANGED: This function now ONLY checks against the safe zones you pass to it.
         function spawnInSafeLocation(newEntity, ...safeZones) {
             for (let i = 0; i < GAME_CONSTANTS.SAFE_SPAWN_ATTEMPTS; i++) {
                 newEntity.x = Math.random() * (canvas.width - 80) + 40;
@@ -615,7 +616,6 @@
             return false;
         }
 
-        // CHANGED: This function now explicitly passes the list of bars to the spawner.
         function spawnGhost(playerSafeZone) {
             const newGhost = new Ghost(0, 0, currentLevelProps.ghostBaseSpeed, currentLevelProps.ghostTint);
             if (spawnInSafeLocation(newGhost, playerSafeZone, ...entities.jailBars)) {
@@ -623,7 +623,6 @@
             }
         }
         
-        // This function uses its own simple spawner that can't get stuck.
         function spawnJailBar(playerSafeZone) {
             const isHorizontal = Math.random() > 0.5;
             const width = isHorizontal ? GAME_CONSTANTS.JAIL_BAR_LONG_SIDE : GAME_CONSTANTS.JAIL_BAR_SHORT_SIDE;
@@ -644,7 +643,6 @@
             console.warn("Could not find a safe spawn position for a jail bar.");
         }
         
-        // CHANGED: This function now explicitly passes the list of bars to the spawner.
         function spawnBread() {
             const newBread = new Bread(0, 0, currentLevelProps.breadTint);
             const playerSafeZone = { ...entities.player, width: 120, height: 120 };
@@ -653,7 +651,6 @@
             }
         }
         
-        // CHANGED: This function now explicitly passes the list of bars to the spawner.
         function spawnPowerup() {
             const newPowerup = new Powerup(0, 0, currentLevelProps.powerupTint);
             const playerSafeZone = { ...entities.player, width: 120, height: 120 };
