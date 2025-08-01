@@ -114,7 +114,7 @@
         };
         let inputPos = { x: null, y: null, active: false };
         let currentLevelProps = {};
-        let audioInitialized = false; // FIX: For mobile audio compatibility
+        let audioInitialized = false;
 
         // --- Asset Management ---
         const assetPaths = {
@@ -161,7 +161,7 @@
                 return (rect1.x - rect1.width / 2 < rect2.x + rect2.width / 2 && rect1.x + rect1.width / 2 > rect2.x - rect2.width / 2 && rect1.y - rect1.height / 2 < rect2.y + rect2.height / 2 && rect1.y + rect1.height / 2 > rect2.y - rect2.height / 2);
             },
             playSound(soundKey) {
-                if (!audioInitialized) return; // FIX: Don't play if audio isn't unlocked
+                if (!audioInitialized) return;
                 const audio = loadedAssets[soundKey];
                 if (audio) {
                     audio.currentTime = 0;
@@ -232,7 +232,8 @@
                         const angle = Math.atan2(dy, dx);
                         let potentialX = this.x + Math.cos(angle) * this.speed * dt;
                         let potentialY = this.y + Math.sin(angle) * this.speed * dt;
-
+                        
+                        // NEW: Flip the sprite based on movement direction
                         this.flipX = dx < 0;
 
                         const originalX = this.x, originalY = this.y;
@@ -286,6 +287,8 @@
                     this.x += (dx / dist) * currentSpeed * dt;
                     this.y += (dy / dist) * currentSpeed * dt;
                 }
+                
+                // NEW: Flip the sprite based on movement direction
                 this.flipX = dx < 0;
             }
             draw(ctx) {
@@ -562,7 +565,6 @@
             for (let i = 0; i < currentLevelProps.numJailBars; i++) spawnJailBar(safeZone);
             for (let i = 0; i < currentLevelProps.numGhosts; i++) spawnGhost(safeZone);
 
-            // FIX: Spawn initial bread outside of the player's safe zone to prevent instant collection.
             for (let i = 0; i < currentLevelProps.breadNeeded; i++) {
                 const newBread = new Bread(0, 0, currentLevelProps.breadTint);
                 if (spawnInSafeLocation(newBread, safeZone, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
@@ -685,11 +687,8 @@
             requestAnimationFrame(gameLoop);
         }
         
-        // --- FIX: Function to unlock audio on mobile devices ---
         function initAudio() {
             if (audioInitialized) return;
-            // A tiny, silent sound is played on the first user interaction.
-            // This satisfies browser security policies.
             Object.values(loadedAssets).forEach(asset => {
                 if (asset instanceof HTMLAudioElement) {
                     asset.play();
@@ -705,7 +704,7 @@
         window.addEventListener('resize', resizeCanvas);
         
         window.addEventListener('pointerdown', (e) => {
-            initAudio(); // Unlock audio on the first tap
+            initAudio();
             const rect = canvas.getBoundingClientRect();
             inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
             inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
@@ -716,7 +715,6 @@
             inputPos.active = false;
         });
 
-        // FIX: Correctly track pointer/finger position at all times.
         window.addEventListener('pointermove', (e) => {
             const rect = canvas.getBoundingClientRect();
             inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
