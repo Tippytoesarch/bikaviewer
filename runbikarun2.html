@@ -3,15 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Run Bika Run! (Improved)</title>
+    <title>Run Bika Run! (Final)</title>
     <style>
+        /* MODIFIED: Simplified body and canvas for fullscreen */
         body {
             margin: 0;
             overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
             background-color: #000;
             font-family: 'Avenir Next', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             color: white;
@@ -23,11 +20,6 @@
         }
         canvas {
             display: block;
-            background-color: #003300;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-            max-width: 100vw;
-            max-height: 100vh;
         }
         #loading-screen {
             position: absolute;
@@ -88,24 +80,27 @@
 
         // --- Game Constants ---
         const GAME_CONSTANTS = {
-            PLAYER_BASE_SPEED: 240, // pixels per second
+            PLAYER_BASE_SPEED: 240,
             PLAYER_BOOST_SPEED: 480,
-            PLAYER_WIDTH: 40,
-            PLAYER_HEIGHT: 40,
-            GHOST_WIDTH: 40,
-            GHOST_HEIGHT: 40,
-            BREAD_WIDTH: 30,
-            BREAD_HEIGHT: 20,
+            PLAYER_WIDTH: 32,
+            PLAYER_HEIGHT: 32,
+            GHOST_WIDTH: 34,
+            GHOST_HEIGHT: 34,
+            BREAD_WIDTH: 28,
+            BREAD_HEIGHT: 18,
             POWERUP_WIDTH: 30,
             POWERUP_HEIGHT: 30,
-            ASPECT_RATIO: 768 / 1024, // H / W
-            GAME_OVER_DURATION: 3.5, // seconds
+            JAIL_BAR_LONG_SIDE: 50,
+            JAIL_BAR_SHORT_SIDE: 5,
+            // REMOVED: Aspect ratio constant is no longer needed.
+            // ASPECT_RATIO: 16 / 9,
+            GAME_OVER_DURATION: 3.5,
             LEVEL_TRANSITION_DURATION: 10.0,
             SPEED_BOOST_DURATION: 5.0,
-            BREAD_COLLECT_ANIM_DURATION: 0.4,
             BACKGROUND_FADE_DURATION: 1.5,
             SAFE_SPAWN_ATTEMPTS: 50,
             CANVAS_PADDING: 20,
+            SCORE_TEXT_Y_OFFSET: 75,
         };
 
         // --- Game State Variables ---
@@ -120,9 +115,9 @@
             powerups: [],
             jailBars: [],
         };
-        let inputPos = { x: null, y: null, active: false }; // Unified input for touch/mouse
+        let inputPos = { x: null, y: null, active: false };
         let currentLevelProps = {};
-        
+
         // --- Asset Management ---
         const assetPaths = {
             player: 'https://tippytoesarch.github.io/bikaviewer/assets/player.png',
@@ -130,16 +125,11 @@
             bread: 'https://tippytoesarch.github.io/bikaviewer/assets/bread.png',
             powerup: 'https://tippytoesarch.github.io/bikaviewer/assets/powerup.png',
             qrImages: [
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr1.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr2.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr3.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr4.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr5.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr6.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr7.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr8.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr9.png',
-                'https://tippytoesarch.github.io/bikaviewer/assets/qr10.png'
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr1.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr2.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr3.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr4.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr5.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr6.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr7.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr8.png',
+                'https://tippytoesarch.github.io/bikaviewer/assets/qr9.png', 'https://tippytoesarch.github.io/bikaviewer/assets/qr10.png'
             ],
             biteSound: 'https://tippytoesarch.github.io/bikaviewer/assets/bite.mp3',
             gameOverSound: 'https://tippytoesarch.github.io/bikaviewer/assets/game-over.mp3',
@@ -147,12 +137,13 @@
             levelUpSound: 'https://tippytoesarch.github.io/bikaviewer/assets/level-up.mp3'
         };
         const loadedAssets = {};
+        const tintedAssetCache = {};
 
         // --- Level Properties ---
         const levelProperties = {
             1: { backgroundColor: '#003300', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: 'gray', numGhosts: 3, ghostBaseSpeed: 90, numJailBars: 8, jailBarBaseSpeed: 1.0, breadSpawnInterval: 2.0, powerupSpawnInterval: 12.0, breadNeeded: 10, playerSafeRadius: 80, ghostActivationDelay: 0.0, ghostInitialSpeedFactor: 1.0, },
             2: { backgroundColor: '#202820', playerTint: 'rgb(255, 204, 204)', ghostTint: 'rgb(153, 128, 102)', breadTint: 'rgb(255, 178, 128)', powerupTint: 'rgb(204, 255, 204)', jailBarColor: '#404040', numGhosts: 4, ghostBaseSpeed: 120, numJailBars: 10, jailBarBaseSpeed: 1.2, breadSpawnInterval: 1.8, powerupSpawnInterval: 10.0, breadNeeded: 20, playerSafeRadius: 100, ghostActivationDelay: 0.5, ghostInitialSpeedFactor: 0.8, },
-            3: { backgroundColor: 'rgb(24, 32, 40)', playerTint: 'rgb(204, 204, 255)', ghostTint: 'rgb(128, 153, 153)', breadTint: 'rgb(178, 128, 178)', powerupTint: 'rgb(255, 255, 204)', jailBarColor: '#303050', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
+            3: { backgroundColor: '#4C2A85', playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: '#D3D3D3', numGhosts: 5, ghostBaseSpeed: 150, numJailBars: 12, jailBarBaseSpeed: 1.4, breadSpawnInterval: 1.5, powerupSpawnInterval: 8.0, breadNeeded: 30, playerSafeRadius: 120, ghostActivationDelay: 1.0, ghostInitialSpeedFactor: 0.6, }
         };
 
         // --- Utility Functions ---
@@ -165,7 +156,7 @@
                     const hex = colorStr.slice(1);
                     return hex.length === 3 ? [parseInt(hex[0]+hex[0],16), parseInt(hex[1]+hex[1],16), parseInt(hex[2]+hex[2],16)] : [parseInt(hex.substring(0,2),16), parseInt(hex.substring(2,4),16), parseInt(hex.substring(4,6),16)];
                 }
-                return [0, 0, 0]; // Default black
+                return [0, 0, 0];
             },
             rgbArrayToColorString(rgb) { return `rgb(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])})`; },
             checkCollision(rect1, rect2) {
@@ -180,7 +171,7 @@
             }
         };
 
-        // --- Entity Classes (Object-Oriented Refactor) ---
+        // --- Entity Classes ---
         class Entity {
             constructor(x, y, width, height, color) {
                 Object.assign(this, { x, y, width, height, color, flipX: false });
@@ -189,13 +180,36 @@
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 if (this.flipX) ctx.scale(-1, 1);
-                ctx.drawImage(image, -this.width / 2, -this.height / 2, this.width, this.height);
-                
-                // Apply tint if specified
-                if (tintColor && tintColor.toLowerCase() !== 'white' && tintColor !== '#ffffff') {
-                    ctx.globalCompositeOperation = 'source-atop';
-                    ctx.fillStyle = tintColor;
-                    ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+
+                if (!tintColor || tintColor === 'white' || !image.src) {
+                    ctx.drawImage(image, -this.width / 2, -this.height / 2, this.width, this.height);
+                } else {
+                    const cacheKey = image.src + '_' + tintColor;
+                    let tintedImage = tintedAssetCache[cacheKey];
+
+                    if (!tintedImage) {
+                        const offscreenCanvas = document.createElement('canvas');
+                        const offscreenCtx = offscreenCanvas.getContext('2d');
+                        offscreenCanvas.width = image.width;
+                        offscreenCanvas.height = image.height;
+                        offscreenCtx.drawImage(image, 0, 0);
+                        const imageData = offscreenCtx.getImageData(0, 0, image.width, image.height);
+                        const data = imageData.data;
+                        const tintRgb = utils.parseColorToRGB(tintColor);
+
+                        for (let i = 0; i < data.length; i += 4) {
+                            const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+                            if (a > 0) {
+                                data[i] = (r / 255) * tintRgb[0];
+                                data[i + 1] = (g / 255) * tintRgb[1];
+                                data[i + 2] = (b / 255) * tintRgb[2];
+                            }
+                        }
+                        offscreenCtx.putImageData(imageData, 0, 0);
+                        tintedAssetCache[cacheKey] = offscreenCanvas;
+                        tintedImage = offscreenCanvas;
+                    }
+                    ctx.drawImage(tintedImage, -this.width / 2, -this.height / 2, this.width, this.height);
                 }
                 ctx.restore();
             }
@@ -208,23 +222,20 @@
                 this.speedBoostTimer = 0;
             }
             update(dt) {
-                // Speed boost
                 if (this.speedBoostTimer > 0) {
                     this.speedBoostTimer -= dt;
                     if (this.speedBoostTimer <= 0) this.speed = GAME_CONSTANTS.PLAYER_BASE_SPEED;
                 }
-                // Movement
                 if (inputPos.active) {
                     const dx = inputPos.x - this.x;
                     const dy = inputPos.y - this.y;
-                    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) { // Prevents micro-movements
+                    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
                         const angle = Math.atan2(dy, dx);
                         let potentialX = this.x + Math.cos(angle) * this.speed * dt;
                         let potentialY = this.y + Math.sin(angle) * this.speed * dt;
-                        
-                        this.flipX = dx < 0; // Flip sprite based on direction
 
-                        // Collision with jail bars
+                        this.flipX = dx < 0;
+
                         const originalX = this.x, originalY = this.y;
                         this.x = potentialX;
                         if (entities.jailBars.some(bar => utils.checkCollision(this, bar))) this.x = originalX;
@@ -232,7 +243,6 @@
                         if (entities.jailBars.some(bar => utils.checkCollision(this, bar))) this.y = originalY;
                     }
                 }
-                // Clamp to canvas bounds
                 const pad = GAME_CONSTANTS.CANVAS_PADDING;
                 this.x = Math.max(pad + this.width / 2, Math.min(this.x, canvas.width - pad - this.width / 2));
                 this.y = Math.max(pad + this.height / 2, Math.min(this.y, canvas.height - pad - this.height / 2));
@@ -246,7 +256,7 @@
                 utils.playSound('powerupSound');
             }
         }
-        
+
         class Ghost extends Entity {
             constructor(x, y, speed, color) {
                 super(x, y, GAME_CONSTANTS.GHOST_WIDTH, GAME_CONSTANTS.GHOST_HEIGHT, color);
@@ -265,7 +275,6 @@
                 }
                 if (!this.isActive || !player) return;
 
-                // Speed ramp-up
                 const rampUpDuration = 3.0;
                 const timeSinceActive = this.levelStartTime - this.activationDelay;
                 const speedFactor = Math.min(1.0, this.initialSpeedFactor + (1.0 - this.initialSpeedFactor) * (timeSinceActive / rampUpDuration));
@@ -293,7 +302,7 @@
             update(dt) {
                 this.x += this.xVel * dt;
                 this.y += this.yVel * dt;
-                const pad = 30; // Custom padding for bars
+                const pad = 30;
                 if (this.x - this.width/2 < pad || this.x + this.width/2 > canvas.width - pad) this.xVel *= -1;
                 if (this.y - this.height/2 < pad || this.y + this.height/2 > canvas.height - pad) this.yVel *= -1;
             }
@@ -306,16 +315,6 @@
         class Collectible extends Entity {
             constructor(x, y, width, height, color) {
                 super(x, y, width, height, color);
-                this.isCollected = false;
-                this.animTimer = 0;
-                this.scale = 1;
-            }
-            updateCollectionAnim(dt) {
-                if (!this.isCollected) return false;
-                this.animTimer += dt;
-                const progress = this.animTimer / GAME_CONSTANTS.BREAD_COLLECT_ANIM_DURATION;
-                this.scale = 1 + Math.sin(progress * Math.PI) * 0.5; // Simple pop animation
-                return progress >= 1; // Return true when animation is finished
             }
         }
 
@@ -324,11 +323,7 @@
                 super(x, y, GAME_CONSTANTS.BREAD_WIDTH, GAME_CONSTANTS.BREAD_HEIGHT, color);
             }
             draw(ctx) {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.scale(this.scale, this.scale);
                 super.draw(ctx, loadedAssets.bread, currentLevelProps.breadTint);
-                ctx.restore();
             }
         }
 
@@ -340,42 +335,54 @@
                 super.draw(ctx, loadedAssets.powerup, currentLevelProps.powerupTint);
             }
         }
-        
+
         // --- Finite State Machine (FSM) ---
         let currentState;
         const gameStates = {
             LOADING: {
                 enter() {
-                    const assetEntries = Object.entries(assetPaths).flatMap(([key, value]) => key === 'qrImages' ? value : [[key, value]]);
-                    const totalAssets = assetEntries.length;
+                    const allPaths = Object.entries(assetPaths).flatMap(([key, value]) => key === 'qrImages' ? value.map(p => [p, p]) : [[key, value]]);
+                    const totalAssets = allPaths.length;
                     let loadedCount = 0;
 
-                    const updateProgress = () => {
-                        loadedCount++;
-                        const progress = Math.floor((loadedCount / totalAssets) * 100);
-                        loadingProgress.textContent = `${progress}%`;
-                        loadingText.textContent = `Loading Assets (${loadedCount}/${totalAssets})...`;
-                        if (loadedCount === totalAssets) {
-                            setTimeout(() => {
-                                loadingScreen.style.opacity = '0';
-                                loadingScreen.addEventListener('transitionend', () => loadingScreen.style.display = 'none', { once: true });
-                                changeState('TITLE');
-                            }, 250); // Brief delay to show 100%
-                        }
-                    };
+                    const promises = allPaths.map(([key, path]) => new Promise((resolve) => {
+                        const handleSuccess = (asset) => {
+                            loadedAssets[key] = asset;
+                            loadedCount++;
+                            const progress = Math.floor((loadedCount / totalAssets) * 100);
+                            loadingProgress.textContent = `${progress}%`;
+                            loadingText.textContent = `Loading Assets (${loadedCount}/${totalAssets})...`;
+                            resolve();
+                        };
+                        const handleError = (e) => {
+                            console.warn(`Failed to load: ${path}`, e);
+                            loadedCount++;
+                            resolve(); // Resolve even on error to not block loading
+                        };
 
-                    assetEntries.forEach(entry => {
-                        const [key, path] = Array.isArray(entry) ? entry : [entry, entry]; // Handle both formats
                         if (path.endsWith('.png')) {
                             const img = new Image();
                             img.src = path;
-                            img.onload = () => { loadedAssets[key] = img; updateProgress(); };
-                            img.onerror = () => { console.error(`Failed to load: ${path}`); updateProgress(); };
+                            img.onload = () => handleSuccess(img);
+                            img.onerror = handleError;
                         } else if (path.endsWith('.mp3')) {
-                            const audio = new Audio(path);
-                            audio.oncanplaythrough = () => { loadedAssets[key] = audio; updateProgress(); };
-                            audio.onerror = () => { console.warn(`Failed to load: ${path}`); updateProgress(); };
+                            const audio = new Audio();
+                            audio.src = path;
+                            const timeoutId = setTimeout(() => {
+                                console.warn(`Audio timed out: ${path}. Continuing...`);
+                                handleSuccess(null);
+                            }, 2000);
+                            audio.oncanplaythrough = () => { clearTimeout(timeoutId); handleSuccess(audio); };
+                            audio.onerror = (e) => { clearTimeout(timeoutId); handleError(e); };
                         }
+                    }));
+
+                    Promise.all(promises).then(() => {
+                        setTimeout(() => {
+                            loadingScreen.style.opacity = '0';
+                            loadingScreen.addEventListener('transitionend', () => loadingScreen.style.display = 'none', { once: true });
+                            changeState('TITLE');
+                        }, 250);
                     });
                 }
             },
@@ -386,10 +393,10 @@
                     entities.player = null;
                     canvas.style.backgroundColor = levelProperties[1].backgroundColor;
                 },
-                update(dt) {
+                update() {
                     if (inputPos.active) {
                         changeState('PLAYING');
-                        inputPos.active = false; // Consume click
+                        inputPos.active = false;
                     }
                 },
                 draw() {
@@ -400,13 +407,9 @@
                 }
             },
             PLAYING: {
-                timers: {
-                    levelStart: 0,
-                    breadSpawn: 0,
-                    powerupSpawn: 0,
-                },
+                timers: { levelStart: 0, breadSpawn: 0, powerupSpawn: 0, },
                 enter() {
-                    if (level === 1) score = 0; // Reset score only when starting from title
+                    if (level === 1) score = 0;
                     this.timers.levelStart = 0;
                     this.timers.breadSpawn = 0;
                     this.timers.powerupSpawn = 0;
@@ -417,12 +420,10 @@
                     this.timers.breadSpawn += dt;
                     this.timers.powerupSpawn += dt;
                     
-                    // Update entities
                     entities.player?.update(dt);
                     entities.ghosts.forEach(g => g.update(dt, entities.player, this.timers.levelStart));
                     entities.jailBars.forEach(b => b.update(dt));
 
-                    // Spawning
                     if (this.timers.breadSpawn > currentLevelProps.breadSpawnInterval) {
                         spawnBread();
                         this.timers.breadSpawn = 0;
@@ -432,37 +433,30 @@
                         this.timers.powerupSpawn = 0;
                     }
 
-                    // Collisions
                     if (entities.player) {
-                        // Ghost collision -> GAME OVER
                         if (entities.ghosts.some(g => g.isActive && utils.checkCollision(entities.player, g))) {
                             utils.playSound('gameOverSound');
                             changeState('GAME_OVER');
                             return;
                         }
-                        // Bread collection
-                        entities.breads.forEach(b => {
-                            if (!b.isCollected && utils.checkCollision(entities.player, b)) {
-                                b.isCollected = true;
+                        entities.breads = entities.breads.filter(bread => {
+                            if (utils.checkCollision(entities.player, bread)) {
                                 score++;
                                 scoreInCurrentLevel++;
                                 utils.playSound('biteSound');
+                                return false;
                             }
+                            return true;
                         });
-                        // Powerup collection
-                        entities.powerups.forEach(p => {
-                            if (!p.isCollected && utils.checkCollision(entities.player, p)) {
-                                p.isCollected = true;
+                        entities.powerups = entities.powerups.filter(powerup => {
+                            if (utils.checkCollision(entities.player, powerup)) {
                                 entities.player.activateSpeedBoost();
+                                return false;
                             }
+                            return true;
                         });
                     }
 
-                    // Filter collected items
-                    entities.breads = entities.breads.filter(b => !b.updateCollectionAnim(dt));
-                    entities.powerups = entities.powerups.filter(p => !p.updateCollectionAnim(dt));
-
-                    // Level complete check
                     if (scoreInCurrentLevel >= currentLevelProps.breadNeeded) {
                         utils.playSound('levelUpSound');
                         changeState('LEVEL_TRANSITION');
@@ -475,45 +469,33 @@
                     entities.ghosts.forEach(g => g.draw(ctx));
                     entities.player?.draw(ctx);
                     drawText(`Burek: ${scoreInCurrentLevel}/${currentLevelProps.breadNeeded}  |  Level: ${level}  |  Total: ${score}`,
-                        canvas.width / 2, canvas.height - 30, '20px Avenir Next', 'white');
+                        canvas.width / 2, canvas.height - GAME_CONSTANTS.SCORE_TEXT_Y_OFFSET, '20px Avenir Next', 'white');
                 }
             },
             LEVEL_TRANSITION: {
-                timer: 0,
-                startColor: [],
-                endColor: [],
-                qrImage: null,
+                timer: 0, startColor: [], endColor: [], qrImage: null,
                 enter() {
                     this.timer = 0;
                     level++;
-                    
                     const nextLevelProps = getDynamicLevelProps(level);
                     this.startColor = utils.parseColorToRGB(canvas.style.backgroundColor);
                     this.endColor = utils.parseColorToRGB(nextLevelProps.backgroundColor);
                     this.qrImage = loadedAssets[assetPaths.qrImages[Math.floor(Math.random() * assetPaths.qrImages.length)]];
-                    
-                    // Clear entities for the new level
-                    entities.ghosts = [];
-                    entities.breads = [];
-                    entities.powerups = [];
-                    entities.jailBars = [];
+                    entities.ghosts = []; entities.breads = []; entities.powerups = []; entities.jailBars = [];
                 },
                 update(dt) {
                     this.timer += dt;
-
-                    // Background color transition
                     const t = Math.min(1, this.timer / GAME_CONSTANTS.BACKGROUND_FADE_DURATION);
                     const r = this.startColor[0] + (this.endColor[0] - this.startColor[0]) * t;
                     const g = this.startColor[1] + (this.endColor[1] - this.startColor[1]) * t;
                     const b = this.startColor[2] + (this.endColor[2] - this.startColor[2]) * t;
                     canvas.style.backgroundColor = utils.rgbArrayToColorString([r, g, b]);
-
                     if (this.timer >= GAME_CONSTANTS.LEVEL_TRANSITION_DURATION) {
                         changeState('PLAYING');
                     }
                 },
                 draw() {
-                    entities.player?.draw(ctx); // Keep showing player
+                    entities.player?.draw(ctx);
                     const countdown = Math.ceil(GAME_CONSTANTS.LEVEL_TRANSITION_DURATION - this.timer);
                     drawText(`Level ${level-1} Complete!`, canvas.width / 2, canvas.height * 0.2, '40px Avenir Next', 'lime');
                     drawText('Scan QR for Bonus!', canvas.width / 2, canvas.height * 0.28, '30px Avenir Next', 'yellow');
@@ -529,7 +511,7 @@
                 enter() {
                     this.timer = 0;
                     if (score > bestSessionScore) bestSessionScore = score;
-                    entities.player = null; // Bika is arrested!
+                    entities.player = null;
                 },
                 update(dt) {
                     this.timer += dt;
@@ -540,21 +522,15 @@
                     }
                 },
                 draw() {
-                    // Draw ghosts over everything
                     entities.ghosts.forEach(g => g.draw(ctx));
-
-                    // Red flash effect
                     const flashAlpha = Math.max(0, 0.7 - (this.timer / 1.5));
                     ctx.fillStyle = `rgba(255, 0, 0, ${flashAlpha})`;
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                    // Text
                     const blinkAlpha = 0.6 + Math.sin(performance.now() / 250) * 0.4;
                     drawText('ARRESTED!', canvas.width / 2, canvas.height / 2 - 50, '54px Avenir Next', 'red', 'center', blinkAlpha);
                     drawText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 20, '36px Avenir Next', 'white');
                     drawText(`Level Reached: ${level}`, canvas.width / 2, canvas.height / 2 + 60, '36px Avenir Next', 'white');
-                    
-                    if(this.timer > 1.0) { // Show restart text after a delay
+                    if(this.timer > 1.0) {
                         drawText('Tap to Restart', canvas.width / 2, canvas.height - 50, '25px Avenir Next', 'yellow');
                     }
                 }
@@ -563,9 +539,7 @@
 
         function changeState(newState) {
             currentState = gameStates[newState];
-            if (currentState.enter) {
-                currentState.enter();
-            }
+            currentState.enter?.();
         }
 
         // --- Game Logic & Spawning ---
@@ -574,41 +548,34 @@
             currentLevelProps = getDynamicLevelProps(levelNumber);
             canvas.style.backgroundColor = currentLevelProps.backgroundColor;
             
-            // Re-initialize entities for the level
-            entities.ghosts = [];
-            entities.breads = [];
-            entities.powerups = [];
-            entities.jailBars = [];
+            entities.ghosts = []; entities.breads = []; entities.powerups = []; entities.jailBars = [];
 
-            // Player setup
             if (!entities.player) {
                 entities.player = new Player(canvas.width / 2, canvas.height / 2);
             } else {
                 entities.player.x = canvas.width / 2;
                 entities.player.y = canvas.height / 2;
-                entities.player.speed = GAME_CONSTANTS.PLAYER_BASE_SPEED; // Reset speed
+                entities.player.speed = GAME_CONSTANTS.PLAYER_BASE_SPEED;
             }
 
             const safeZone = { x: entities.player.x, y: entities.player.y, width: currentLevelProps.playerSafeRadius * 2, height: currentLevelProps.playerSafeRadius * 2 };
             
-            // Spawn Jail Bars
-            for (let i = 0; i < currentLevelProps.numJailBars; i++) {
-                spawnJailBar(safeZone);
-            }
-            // Spawn Ghosts
-            for (let i = 0; i < currentLevelProps.numGhosts; i++) {
-                spawnGhost(safeZone);
-            }
+            for (let i = 0; i < currentLevelProps.numJailBars; i++) spawnJailBar(safeZone);
+            for (let i = 0; i < currentLevelProps.numGhosts; i++) spawnGhost(safeZone);
+            for (let i = 0; i < currentLevelProps.breadNeeded; i++) spawnBread();
         }
 
         function getDynamicLevelProps(levelNum) {
             if (levelProperties[levelNum]) return levelProperties[levelNum];
-            
             const base = levelProperties[3];
             const diff = levelNum - 3;
             return {
                 backgroundColor: `rgb(${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*50 + 20)})`,
-                playerTint: 'white', ghostTint: 'white', breadTint: 'white', powerupTint: 'white', jailBarColor: 'gray',
+                playerTint: `rgb(${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)}, ${Math.floor(Math.random() * 50 + 205)})`,
+                ghostTint: `rgb(${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)}, ${Math.floor(Math.random() * 100 + 50)})`,
+                breadTint: `rgb(255, ${Math.floor(Math.random() * 100 + 100)}, ${Math.floor(Math.random() * 50)})`,
+                powerupTint: `rgb(${Math.floor(Math.random() * 100)}, 255, ${Math.floor(Math.random() * 100)})`,
+                jailBarColor: 'gray',
                 numGhosts: Math.min(15, base.numGhosts + diff),
                 ghostBaseSpeed: base.ghostBaseSpeed + diff * 15,
                 numJailBars: Math.min(25, base.numJailBars + diff * 2),
@@ -621,15 +588,12 @@
                 ghostInitialSpeedFactor: base.ghostInitialSpeedFactor,
             };
         }
-
+        
         function spawnInSafeLocation(newEntity, ...safeZones) {
             for (let i = 0; i < GAME_CONSTANTS.SAFE_SPAWN_ATTEMPTS; i++) {
                 newEntity.x = Math.random() * (canvas.width - 80) + 40;
                 newEntity.y = Math.random() * (canvas.height - 80) + 40;
-                
-                const collides = safeZones.some(zone => utils.checkCollision(newEntity, zone)) || 
-                                 entities.jailBars.some(bar => utils.checkCollision(newEntity, bar));
-                if (!collides) return true;
+                if (!safeZones.some(zone => utils.checkCollision(newEntity, zone))) return true;
             }
             console.warn("Could not find safe spawn position for entity.");
             return false;
@@ -637,117 +601,103 @@
 
         function spawnGhost(playerSafeZone) {
             const newGhost = new Ghost(0, 0, currentLevelProps.ghostBaseSpeed, currentLevelProps.ghostTint);
-            if (spawnInSafeLocation(newGhost, playerSafeZone)) {
+            if (spawnInSafeLocation(newGhost, playerSafeZone, ...entities.jailBars)) {
                 entities.ghosts.push(newGhost);
             }
         }
-
+        
         function spawnJailBar(playerSafeZone) {
             const isHorizontal = Math.random() > 0.5;
-            const width = isHorizontal ? 60 : 10;
-            const height = isHorizontal ? 10 : 60;
+            const width = isHorizontal ? GAME_CONSTANTS.JAIL_BAR_LONG_SIDE : GAME_CONSTANTS.JAIL_BAR_SHORT_SIDE;
+            const height = isHorizontal ? GAME_CONSTANTS.JAIL_BAR_SHORT_SIDE : GAME_CONSTANTS.JAIL_BAR_LONG_SIDE;
             const speed = (Math.random() * 50 + 25) * currentLevelProps.jailBarBaseSpeed;
             const angle = Math.random() * Math.PI * 2;
             const newBar = new JailBar(0, 0, width, height, currentLevelProps.jailBarColor, Math.cos(angle) * speed, Math.sin(angle) * speed);
-            if (spawnInSafeLocation(newBar, playerSafeZone)) {
-                entities.jailBars.push(newBar);
+            
+            for (let i = 0; i < GAME_CONSTANTS.SAFE_SPAWN_ATTEMPTS; i++) {
+                newBar.x = Math.random() * (canvas.width - 80) + 40;
+                newBar.y = Math.random() * (canvas.height - 80) + 40;
+                if (!utils.checkCollision(newBar, playerSafeZone)) {
+                    entities.jailBars.push(newBar);
+                    return;
+                }
             }
         }
         
         function spawnBread() {
             const newBread = new Bread(0, 0, currentLevelProps.breadTint);
-            const playerSafeZone = { ...entities.player, width: 120, height: 120 };
-            if (spawnInSafeLocation(newBread, playerSafeZone, ...entities.breads)) {
+            if (spawnInSafeLocation(newBread, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
                 entities.breads.push(newBread);
             }
         }
 
         function spawnPowerup() {
             const newPowerup = new Powerup(0, 0, currentLevelProps.powerupTint);
-            const playerSafeZone = { ...entities.player, width: 120, height: 120 };
-            if (spawnInSafeLocation(newPowerup, playerSafeZone, ...entities.powerups)) {
+            if (spawnInSafeLocation(newPowerup, ...entities.ghosts, ...entities.breads, ...entities.powerups, ...entities.jailBars)) {
                 entities.powerups.push(newPowerup);
             }
         }
 
-        // --- Drawing & Main Loop ---
-        function drawText(text, x, y, font, color, align = 'center', alpha = 1) {
+        // --- Canvas & Rendering ---
+        // MODIFIED: This function now resizes the canvas to fill the entire window.
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function drawText(text, x, y, font, color, align = 'center', alpha = 1.0) {
+            ctx.save();
+            ctx.globalAlpha = alpha;
             ctx.font = font;
             ctx.fillStyle = color;
             ctx.textAlign = align;
             ctx.textBaseline = 'middle';
-            ctx.globalAlpha = alpha;
             ctx.fillText(text, x, y);
-            ctx.globalAlpha = 1;
+            ctx.restore();
         }
 
-        function resizeCanvas() {
-            let newWidth = window.innerWidth;
-            let newHeight = window.innerHeight;
-            if (newHeight / newWidth > GAME_CONSTANTS.ASPECT_RATIO) {
-                newHeight = newWidth * GAME_CONSTANTS.ASPECT_RATIO;
-            } else {
-                newWidth = newHeight / GAME_CONSTANTS.ASPECT_RATIO;
-            }
-            canvas.width = newWidth;
-            canvas.height = newHeight;
+        function clearCanvas() {
+            ctx.fillStyle = canvas.style.backgroundColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
-        
+
+        // --- Main Game Loop ---
         let lastTime = 0;
-        function gameLoop(currentTime) {
-            const dt = (currentTime - lastTime) / 1000;
-            lastTime = currentTime;
+        function gameLoop(timestamp) {
+            const dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            if (currentState.update) currentState.update(dt);
-            if (currentState.draw) currentState.draw();
-
-            requestAnimationFrame(gameLoop);
-        }
-
-        // --- Input Handling (Unified Touch & Mouse) ---
-        function getEventPos(e) {
-            const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: (clientX - rect.left) * (canvas.width / rect.width),
-                y: (clientY - rect.top) * (canvas.height / rect.height)
-            };
-        }
-        function handleInputStart(e) {
-            e.preventDefault();
-            inputPos.active = true;
-            Object.assign(inputPos, getEventPos(e));
-        }
-        function handleInputMove(e) {
-            e.preventDefault();
-            if (inputPos.active) {
-                Object.assign(inputPos, getEventPos(e));
+            if (currentState) {
+                clearCanvas();
+                currentState.update?.(dt);
+                currentState.draw?.();
             }
-        }
-        function handleInputEnd(e) {
-            e.preventDefault();
-            inputPos.active = false;
-        }
-
-        // --- Event Listeners ---
-        window.addEventListener('resize', resizeCanvas);
-        canvas.addEventListener('touchstart', handleInputStart);
-        canvas.addEventListener('touchmove', handleInputMove);
-        canvas.addEventListener('touchend', handleInputEnd);
-        canvas.addEventListener('touchcancel', handleInputEnd);
-        canvas.addEventListener('mousedown', handleInputStart);
-        canvas.addEventListener('mousemove', handleInputMove);
-        canvas.addEventListener('mouseup', handleInputEnd);
-        canvas.addEventListener('mouseleave', handleInputEnd);
-
-        // --- Start Game ---
-        window.onload = () => {
-            changeState('LOADING');
+            
             requestAnimationFrame(gameLoop);
-        };
+        }
+
+        // --- Event Listeners & Initialization ---
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('pointerdown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            inputPos.active = true;
+        });
+        window.addEventListener('pointerup', () => {
+            inputPos.active = false;
+        });
+        window.addEventListener('pointermove', (e) => {
+            if (inputPos.active) {
+                const rect = canvas.getBoundingClientRect();
+                inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            }
+        });
+
+        // Initialize the game
+        changeState('LOADING');
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
