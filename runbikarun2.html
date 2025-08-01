@@ -233,7 +233,6 @@
                         let potentialX = this.x + Math.cos(angle) * this.speed * dt;
                         let potentialY = this.y + Math.sin(angle) * this.speed * dt;
                         
-                        // NEW: Flip the sprite based on movement direction
                         this.flipX = dx < 0;
 
                         const originalX = this.x, originalY = this.y;
@@ -288,7 +287,6 @@
                     this.y += (dy / dist) * currentSpeed * dt;
                 }
                 
-                // NEW: Flip the sprite based on movement direction
                 this.flipX = dx < 0;
             }
             draw(ctx) {
@@ -718,7 +716,7 @@
         window.addEventListener('pointermove', (e) => {
             const rect = canvas.getBoundingClientRect();
             inputPos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
-            inputPos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            input_pos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
         });
 
         // Initialize the game
